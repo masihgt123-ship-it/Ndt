@@ -29,7 +29,11 @@ jobs:
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev \
             libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
-            build-essential ccache libltdl-dev
+            build-essential ccache libltdl-dev wget
+
+      - name: Download Persian Font Automatically
+        run: |
+          wget -q -O font.ttf https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Regular.ttf
 
       - name: Install Buildozer & Dependencies
         run: |
