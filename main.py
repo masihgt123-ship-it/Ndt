@@ -17,14 +17,15 @@ from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset_path(filename):
-    # جستجو در مسیر دقیق و مسیرهای جانبی اندروید
-    paths_to_check = [
-        os.path.join(BASE_DIR, filename),
+    """یافتن مطمئن فایل در اندروید و سیستم‌عامل‌های مختلف"""
+    candidates = [
         filename,
+        os.path.join(BASE_DIR, filename),
         os.path.join(os.getcwd(), filename),
+        os.path.abspath(filename),
         os.path.join(BASE_DIR, "..", filename)
     ]
-    for p in paths_to_check:
+    for p in candidates:
         if os.path.isfile(p):
             return p
     return None
@@ -40,7 +41,8 @@ except ImportError:
     def fa(text):
         return text
 
-font_file = get_asset_path("font.ttf")
+# پشتیبانی از هر دو نام فونت در مخزن
+font_file = get_asset_path("Vazirmatn-Regular.ttf") or get_asset_path("font.ttf")
 FONT_PATH = font_file if font_file else "Roboto"
 
 ISOTOPES = {
@@ -99,7 +101,6 @@ class NDTApp(App):
         Window.clearcolor = (0.05, 0.06, 0.07, 1)
         self.current_iso = "Ir-192"
 
-        # لایه اصلی FloatLayout برای پشتیبانی از پس‌زمینه تمام‌صفحه
         main_root = FloatLayout()
 
         # ----------------- پس‌زمینه (bg.png) -----------------
@@ -114,7 +115,7 @@ class NDTApp(App):
             )
             main_root.add_widget(bg_image)
 
-            # لایه سایه‌روشن مشکی برای خوانایی متن‌ها روی عکس
+            # لایه نیمه‌شفاف برای خوانایی متن‌ها روی عکس
             overlay = BoxLayout(size_hint=(1, 1))
             with overlay.canvas.before:
                 Color(0.04, 0.05, 0.07, 0.85)
@@ -123,10 +124,10 @@ class NDTApp(App):
                          size=lambda inst, val: setattr(self.rect_overlay, 'size', val))
             main_root.add_widget(overlay)
 
-        # ----------------- بدنه اصلی برنامه -----------------
+        # ----------------- بدنه اصلی -----------------
         root = BoxLayout(orientation='vertical', size_hint=(1, 1))
 
-        # نوار هدر بالا (شامل لوگو و نام شرکت)
+        # نوار هدر (لوگو + عنوان شرکت)
         header = ModernCard(
             orientation='horizontal',
             bg=(0.08, 0.09, 0.11, 0.98),
@@ -139,29 +140,26 @@ class NDTApp(App):
             spacing=dp(12)
         )
 
-        # لوگوی شرکت: بررسی فایل logo.png یا icon.png
         logo_path = get_asset_path("logo.png") or get_asset_path("icon.png")
         if logo_path:
             logo_img = Image(
                 source=logo_path,
                 size_hint=(None, None),
-                size=(dp(52), dp(52)),
+                size=(dp(54), dp(54)),
                 allow_stretch=True,
                 keep_ratio=True
             )
             header.add_widget(logo_img)
         else:
-            # اگر فایلی پیدا نشد آیکون گرافیکی رزرو نمایش داده شود
             fallback_lbl = Label(
                 text="☢",
-                font_size=sp(28),
+                font_size=sp(30),
                 size_hint=(None, 1),
                 width=dp(40),
                 color=(1, 0.55, 0.05, 1)
             )
             header.add_widget(fallback_lbl)
 
-        # عنوان شرکت
         h_title = Label(
             text=fa("شرکت رادیوگرافی صنعتی ایران"),
             font_name=FONT_PATH,
@@ -175,11 +173,11 @@ class NDTApp(App):
         header.add_widget(h_title)
         root.add_widget(header)
 
-        # فضای میانی برای سوئیچ تب‌ها
+        # محفظه تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
-        # نوار نویگیشن پایین
+        # نوار دکمه‌های پایین
         nav = BoxLayout(
             orientation='horizontal',
             size_hint_y=None,
