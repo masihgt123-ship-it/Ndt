@@ -7,12 +7,12 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
-fromKivy.uix.button import Button # type: ignore
+from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.modalview import ModalView
 from kivy.graphics import Color, RoundedRectangle, Line
 
-# بررسی و بارگذاری کتابخانه RTL
+# ماژول‌های اصلاح متن و چیدمان راست‌به‌چپ فارسی
 try:
     import arabic_reshaper
     from bidi.algorithm import get_display
@@ -27,7 +27,7 @@ except ImportError:
 
 FONT_PATH = "font.ttf"
 
-# ثابت‌های گاما برای ایزوتوپ‌های صنعتی (R * m^2 / (hr * Ci))
+# مقادیر ثابت پرتودهی گاما بر حسب (R * m^2 / (hr * Ci))
 ISOTOPES = {
     "Ir-192": {"name": "Ir-192", "gamma": 0.48, "fa_name": "ایریدیوم ۱۹۲"},
     "Se-75":  {"name": "Se-75",  "gamma": 0.20, "fa_name": "سلنیوم ۷۵"},
@@ -37,8 +37,10 @@ ISOTOPES = {
 
 COMPANY_PHONES = ["09122012248", "09121042253", "09121326011"]
 
+
 class RoundedCard(BoxLayout):
-    def __init__(self, bg_color=(0.11, 0.13, 0.16, 1), border_color=(0.2, 0.25, 0.3, 1), radius=16, **kwargs):
+    """ویجت کارت مدرن تیره با لبه‌های منحنی و کادر مرزی دقیق"""
+    def __init__(self, bg_color=(0.11, 0.13, 0.16, 1), border_color=(0.20, 0.25, 0.30, 1), radius=16, **kwargs):
         super(RoundedCard, self).__init__(**kwargs)
         self.bg_color = bg_color
         self.border_color = border_color
@@ -47,7 +49,7 @@ class RoundedCard(BoxLayout):
             self.color_bg = Color(*self.bg_color)
             self.rect_bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
             self.color_line = Color(*self.border_color)
-            self.line_border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, self.radius], width=1.5)
+            self.line_border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, self.radius], width=1.4)
         self.bind(pos=self._update_shape, size=self._update_shape)
 
     def _update_shape(self, *args):
@@ -58,7 +60,7 @@ class RoundedCard(BoxLayout):
 
 class NDTCalculatorApp(App):
     def build(self):
-        Window.clearcolor = (0.07, 0.08, 0.09, 1)  # رنگ پس‌زمینه تیره صنعتی
+        Window.clearcolor = (0.07, 0.08, 0.09, 1)  # پس‌زمینه زغالی ایمنی
         self.selected_isotope = "Ir-192"
         self.iso_buttons = {}
 
@@ -66,12 +68,12 @@ class NDTCalculatorApp(App):
         root = BoxLayout(
             orientation='vertical',
             size_hint_y=None,
-            padding=[20, 18, 20, 24],
+            padding=[20, 16, 20, 24],
             spacing=16
         )
         root.bind(minimum_height=root.setter('height'))
 
-        # ----------------- هدر و لوگوی اصلی -----------------
+        # ----------------- ۱. سربرگ و لوگوی شرکت -----------------
         header_box = BoxLayout(orientation='vertical', size_hint_y=None, height=160, spacing=6)
         
         try:
@@ -83,14 +85,14 @@ class NDTCalculatorApp(App):
         title_lbl = Label(
             text=fa("محاسبه‌گر فاصله ایمن رادیوگرافی"),
             font_name=FONT_PATH,
-            font_size='20sp',
+            font_size='21sp',
             bold=True,
-            color=(0.95, 0.95, 0.97, 1),
+            color=(0.95, 0.95, 0.98, 1),
             size_hint_y=None,
             height=36
         )
         company_btn = Button(
-            text=fa("شرکت رادیوگرافی صنعتی ایران [ تماس با ما ]"),
+            text=fa("شرکت رادیوگرافی صنعتی ایران  [ تماس مستقیم ]"),
             font_name=FONT_PATH,
             font_size='14sp',
             color=(1.0, 0.55, 0.1, 1),
@@ -105,30 +107,30 @@ class NDTCalculatorApp(App):
         header_box.add_widget(company_btn)
         root.add_widget(header_box)
 
-        # ----------------- هشدار ایمنی -----------------
+        # ----------------- ۲. نوار ایمنی و اخطار پرتوی -----------------
         warning_banner = RoundedCard(
-            bg_color=(1.0, 0.45, 0.0, 0.95),
-            border_color=(1.0, 0.6, 0.2, 1),
+            bg_color=(1.0, 0.46, 0.0, 0.95),
+            border_color=(1.0, 0.62, 0.2, 1),
             radius=12,
             size_hint_y=None,
-            height=50,
-            padding=[12, 8]
+            height=48,
+            padding=[10, 6]
         )
         warn_lbl = Label(
-            text=fa("⚠  منطقه کنترل‌شده پرتو - رعایت اصول ایمنی الزامی است  ⚠"),
+            text=fa("⚠  هشدار ایمنی: رعایت حریم کنترل‌شده اشعه الزامی است  ⚠"),
             font_name=FONT_PATH,
             font_size='13sp',
             bold=True,
-            color=(0.07, 0.07, 0.07, 1)
+            color=(0.06, 0.06, 0.06, 1)
         )
         warning_banner.add_widget(warn_lbl)
         root.add_widget(warning_banner)
 
-        # ----------------- انتخاب ایزوتوپ -----------------
+        # ----------------- ۳. انتخاب ایزوتوپ صنعتی -----------------
         iso_card = RoundedCard(
             orientation='vertical',
             size_hint_y=None,
-            height=110,
+            height=112,
             padding=[14, 12],
             spacing=10
         )
@@ -160,10 +162,10 @@ class NDTCalculatorApp(App):
         iso_card.add_widget(grid_iso)
         root.add_widget(iso_card)
 
-        # ----------------- ورودی‌ها (اکتیویته و دوز) -----------------
-        inputs_row = BoxLayout(spacing=12, size_hint_y=None, height=115)
+        # ----------------- ۴. ورودی‌های اکتیویته و حد دوز مجاز -----------------
+        inputs_row = BoxLayout(spacing=12, size_hint_y=None, height=116)
 
-        # اکتیویته
+        # اکتیویته چشمه (Ci)
         card_act = RoundedCard(orientation='vertical', padding=[12, 10], spacing=8)
         card_act.add_widget(Label(
             text=fa("اکتیویته چشمه (Ci)"),
@@ -189,7 +191,7 @@ class NDTCalculatorApp(App):
         self.input_activity.bind(text=self.calculate)
         card_act.add_widget(self.input_activity)
 
-        # حد دوز مجاز
+        # حد دوز مجاز (µSv/h)
         card_dose = RoundedCard(orientation='vertical', padding=[12, 10], spacing=8)
         card_dose.add_widget(Label(
             text=fa("حد دوز مجاز (µSv/h)"),
@@ -219,7 +221,7 @@ class NDTCalculatorApp(App):
         inputs_row.add_widget(card_dose)
         root.add_widget(inputs_row)
 
-        # ----------------- دکمه محاسبه -----------------
+        # ----------------- ۵. دکمه محاسبه فاصله ایمن -----------------
         calc_btn = Button(
             text=fa("محاسبه فاصله ایمن مرزبندی"),
             font_name=FONT_PATH,
@@ -234,7 +236,7 @@ class NDTCalculatorApp(App):
         calc_btn.bind(on_release=self.calculate)
         root.add_widget(calc_btn)
 
-        # ----------------- کارت نتیجه نهایی -----------------
+        # ----------------- ۶. کارت بزرگ سبز نمایش نتیجه -----------------
         self.result_card = RoundedCard(
             orientation='vertical',
             bg_color=(0.04, 0.18, 0.12, 0.95),
@@ -247,7 +249,7 @@ class NDTCalculatorApp(App):
         )
         
         self.lbl_res_title = Label(
-            text=fa("شعاع محدوده ایمنی (متر)"),
+            text=fa("فاصله ایمن مرزبندی طناب‌کشی"),
             font_name=FONT_PATH,
             font_size='16sp',
             bold=True,
@@ -265,7 +267,7 @@ class NDTCalculatorApp(App):
             height=54
         )
         self.lbl_res_detail = Label(
-            text=fa("در حال انتظار برای مقادیر ورودی..."),
+            text=fa("آماده برای محاسبه..."),
             font_name=FONT_PATH,
             font_size='13sp',
             color=(0.6, 0.8, 0.7, 1),
@@ -300,22 +302,21 @@ class NDTCalculatorApp(App):
             if A <= 0 or dose_uSv <= 0:
                 raise ValueError()
 
-            # محاسبه استاندارد: 
-  # Dose Rate (R/hr) = (Gamma * A) / d^2
-            # 1 R/hr = 10,000 µSv/h  =>  Dose(R/hr) = dose_uSv / 10000
-            # d = sqrt( (Gamma * A) / Dose(R/hr) )
+            # رابطه قانون عکس مجذور فاصله: Dose_Rate (R/h) = (Gamma * A) / d^2
+            # تبدیل حد دوز: 1 R/h = 10,000 µSv/h  =>  Dose(R/h) = dose_uSv / 10000
+            # d = sqrt((Gamma * A) / Dose(R/h))
             gamma = ISOTOPES[self.selected_isotope]["gamma"]
             dose_R_hr = dose_uSv / 10000.0
             distance_m = math.sqrt((gamma * A) / dose_R_hr)
 
             self.lbl_res_value.text = fa(f"{distance_m:.1f} متر")
-            self.lbl_res_detail.text = fa(f"ایزوتوپ: {self.selected_isotope} | اکتیویته: {A} Ci | دوز مجاز: {dose_uSv} µSv/h")
+            self.lbl_res_detail.text = fa(f"ایزوتوپ: {self.selected_isotope} | اکتیویته: {A} Ci | حد دوز: {dose_uSv} µSv/h")
         except Exception:
             self.lbl_res_value.text = fa("خطا در ورودی")
             self.lbl_res_detail.text = fa("لطفاً اعداد معتبر وارد کنید")
 
     def show_contact_modal(self, *args):
-        modal = ModalView(size_hint=(0.9, 0.6), auto_dismiss=True)
+        modal = ModalView(size_hint=(0.9, 0.58), auto_dismiss=True)
         layout = RoundedCard(
             orientation='vertical',
             bg_color=(0.10, 0.12, 0.15, 0.98),
@@ -334,7 +335,7 @@ class NDTCalculatorApp(App):
             height=30
         ))
         layout.add_widget(Label(
-            text=fa("مرجع تخصصی خدمات NDT و بازرسی فنی"),
+            text=fa("مرجع تخصصی خدمات NDT و آزمون‌های غیرمخرب"),
             font_name=FONT_PATH,
             font_size='13sp',
             color=(0.8, 0.85, 0.9, 1),
@@ -360,7 +361,7 @@ class NDTCalculatorApp(App):
             size_hint_y=None,
             height=46,
             background_normal='',
-            background_color=(0.25, 0.3, 0.35, 1)
+            background_color=(0.25, 0.30, 0.35, 1)
         )
         close_btn.bind(on_release=modal.dismiss)
         layout.add_widget(close_btn)
