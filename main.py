@@ -83,20 +83,19 @@ class NDTApp(App):
 
         root = BoxLayout(orientation='vertical')
 
-        # هدر اصلی برنامه با هویت بصری
+        # هدر اصلی (فقط نام شرکت، بدون عنوان اضافه)
         header = ModernCard(
             orientation='horizontal',
             bg=(0.09, 0.10, 0.12, 1),
-            border=(1.0, 0.48, 0.0, 0.4),
+            border=(1.0, 0.48, 0.0, 0.5),
             radius=0,
             border_width=1,
             size_hint_y=None,
-            height=dp(68),
+            height=dp(58),
             padding=[dp(18), dp(8)]
         )
-        h_box = BoxLayout(orientation='vertical')
         h_title = Label(
-            text=fa("مرکز محاسبات رادیوگرافی صنعتی NDT"),
+            text=fa("شرکت رادیوگرافی صنعتی ایران"),
             font_name=FONT_PATH,
             font_size=sp(16),
             bold=True,
@@ -105,29 +104,18 @@ class NDTApp(App):
             valign='middle'
         )
         h_title.bind(size=h_title.setter('text_size'))
-        h_sub = Label(
-            text=fa("شرکت رادیوگرافی صنعتی ایران"),
-            font_name=FONT_PATH,
-            font_size=sp(11),
-            color=(0.6, 0.7, 0.8, 1),
-            halign='right',
-            valign='middle'
-        )
-        h_sub.bind(size=h_sub.setter('text_size'))
-        h_box.add_widget(h_title)
-        h_box.add_widget(h_sub)
-        header.add_widget(h_box)
+        header.add_widget(h_title)
         root.add_widget(header)
 
         # فضای مرکزی تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
-        # نوار ناوبری اختصاصی و تمیز پایین
+        # نوار ناوبری پایین
         nav_wrapper = BoxLayout(
             orientation='horizontal',
             size_hint_y=None,
-            height=dp(64),
+            height=dp(62),
             padding=[dp(10), dp(6), dp(10), dp(6)],
             spacing=dp(8)
         )
@@ -234,7 +222,7 @@ class NDTApp(App):
         c_sh.add_widget(self.in_lead)
         box.add_widget(c_sh)
 
-        # کارت بزرگ نتیجه دیجیتالی سبز فسفری
+        # کارت نتیجه دیجیتالی سبز فسفری با راهنمای استقرار اپراتور
         self.dist_result_card = ModernCard(
             orientation='vertical',
             bg=(0.04, 0.17, 0.11, 0.98),
@@ -242,16 +230,19 @@ class NDTApp(App):
             radius=18,
             border_width=1.6,
             size_hint_y=None,
-            height=dp(136),
+            height=dp(152),
             padding=dp(12),
             spacing=dp(4)
         )
-        self.lbl_dist_title = Label(text=fa("فاصله ایمن مرزبندی طناب‌کشی"), font_name=FONT_PATH, font_size=sp(14), color=(0.8, 0.98, 0.85, 1))
-        self.lbl_dist_val = Label(text="---", font_name=FONT_PATH, font_size=sp(36), bold=True, color=(0.2, 0.98, 0.55, 1))
-        self.lbl_dist_sub = Label(text="", font_name=FONT_PATH, font_size=sp(12), color=(0.7, 0.85, 0.8, 1))
+        self.lbl_dist_title = Label(text=fa("شعاع فاصله ایمن مرزبندی (طناب‌کشی)"), font_name=FONT_PATH, font_size=sp(14), color=(0.8, 0.98, 0.85, 1))
+        self.lbl_dist_val = Label(text="---", font_name=FONT_PATH, font_size=sp(34), bold=True, color=(0.2, 0.98, 0.55, 1))
+        self.lbl_dist_sub = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.7, 0.85, 0.8, 1))
+        self.lbl_operator_pos = Label(text="", font_name=FONT_PATH, font_size=sp(11), bold=True, color=(1, 0.85, 0.4, 1))
+
         self.dist_result_card.add_widget(self.lbl_dist_title)
         self.dist_result_card.add_widget(self.lbl_dist_val)
         self.dist_result_card.add_widget(self.lbl_dist_sub)
+        self.dist_result_card.add_widget(self.lbl_operator_pos)
         box.add_widget(self.dist_result_card)
 
         scroll.add_widget(box)
@@ -287,9 +278,14 @@ class NDTApp(App):
                 self.lbl_dist_sub.text = fa(f"با {lead_mm}mm سرب | اکتیویته مؤثر: {eff_a:.2f} Ci")
             else:
                 self.lbl_dist_sub.text = fa(f"بدون حفاظ | ایزوتوپ: {iso['name']}")
+
+            # راهنمای محل استقرار اپراتور
+            op_safe_dist = d * 1.25  # حریم ایمن اپراتور حداقل ۲۵ درصد بیشتر از مرز طناب‌کشی
+            self.lbl_operator_pos.text = fa(f"👤 استقرار اپراتور / کنترل: خارج از شعاع {op_safe_dist:.1f} متری (با دوزیمتر)")
         except Exception:
             self.lbl_dist_val.text = fa("خطا در ورودی")
             self.lbl_dist_sub.text = fa("مقادیر عددی صحیح وارد نمایید")
+            self.lbl_operator_pos.text = fa("")
 
     # ================= 2. تب محاسبه واپاشی =================
     def render_decay_screen(self):
@@ -331,7 +327,6 @@ class NDTApp(App):
         c_res.add_widget(self.lbl_decay_sub)
         box.add_widget(c_res)
 
-        # جدول پلاک ۷ روز آینده
         c_plaque = ModernCard(orientation='vertical', size_hint_y=None, height=dp(210), padding=dp(12), spacing=dp(4))
         c_plaque.add_widget(Label(text=fa("جدول پلاک روزانه (۷ روز آینده)"), font_name=FONT_PATH, font_size=sp(13), bold=True, color=(1, 0.7, 0.2, 1)))
         self.lbl_plaque = Label(text="", font_name=FONT_PATH, font_size=sp(12), color=(0.85, 0.85, 0.85, 1))
