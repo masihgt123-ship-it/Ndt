@@ -8,9 +8,21 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.label import Label
+from kivy.uix.image import Image
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.graphics import Color, RoundedRectangle, Line
+
+# تشخیص مسیر اجرایی برنامه روی اندروید برای لود قطعی تصاویر
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def get_asset_path(filename):
+    p = os.path.join(BASE_DIR, filename)
+    if os.path.exists(p):
+        return p
+    if os.path.exists(filename):
+        return filename
+    return None
 
 try:
     import arabic_reshaper
@@ -23,7 +35,8 @@ except ImportError:
     def fa(text):
         return text
 
-FONT_PATH = "font.ttf" if os.path.exists("font.ttf") else "Roboto"
+font_file = get_asset_path("font.ttf")
+FONT_PATH = font_file if font_file else "Roboto"
 
 ISOTOPES = {
     "Ir-192": {"name": "Ir-192", "fa": "ایریدیوم ۱۹۲", "gamma": 0.48, "hl": 73.83, "pb": 5.0, "fe": 13.0},
@@ -83,17 +96,34 @@ class NDTApp(App):
 
         root = BoxLayout(orientation='vertical')
 
-        # هدر اصلی (فقط نام شرکت، بدون عنوان اضافه)
+        # ------------------------------------------------------------------
+        # هدر اصلی: شامل لوگوی شرکت + نام شرکت (بدون متن اضافه)
+        # ------------------------------------------------------------------
         header = ModernCard(
             orientation='horizontal',
             bg=(0.09, 0.10, 0.12, 1),
-            border=(1.0, 0.48, 0.0, 0.5),
+            border=(1.0, 0.48, 0.0, 0.4),
             radius=0,
             border_width=1,
             size_hint_y=None,
-            height=dp(58),
-            padding=[dp(18), dp(8)]
+            height=dp(64),
+            padding=[dp(12), dp(6), dp(16), dp(6)],
+            spacing=dp(10)
         )
+
+        # لوگوی شرکت در سمت چپ یا کنار نام
+        logo_path = get_asset_path("logo.png") or get_asset_path("icon.png")
+        if logo_path:
+            logo_img = Image(
+                source=logo_path,
+                size_hint=(None, None),
+                size=(dp(48), dp(48)),
+                allow_stretch=True,
+                keep_ratio=True
+            )
+            header.add_widget(logo_img)
+
+        # عنوان سربرگ (فقط نام شرکت)
         h_title = Label(
             text=fa("شرکت رادیوگرافی صنعتی ایران"),
             font_name=FONT_PATH,
@@ -107,17 +137,17 @@ class NDTApp(App):
         header.add_widget(h_title)
         root.add_widget(header)
 
-        # فضای مرکزی تب‌ها
+        # کانتینر اصلی تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
-        # نوار ناوبری پایین
+        # نوار پایین (Bottom Navigation)
         nav_wrapper = BoxLayout(
             orientation='horizontal',
             size_hint_y=None,
             height=dp(62),
-            padding=[dp(10), dp(6), dp(10), dp(6)],
-            spacing=dp(8)
+            padding=[dp(8), dp(6), dp(8), dp(6)],
+            spacing=dp(6)
         )
         with nav_wrapper.canvas.before:
             Color(0.08, 0.09, 0.11, 1)
@@ -195,9 +225,8 @@ class NDTApp(App):
         c_iso.add_widget(grid)
         box.add_widget(c_iso)
 
-        # ورودی اکتیویته و دوز
+        # ردیف اکتیویته و حد دوز
         row1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(102))
-        
         c_act = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
         c_act.add_widget(Label(text=fa("اکتیویته (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         self.in_act = StyledInput(text="40")
@@ -209,12 +238,11 @@ class NDTApp(App):
         self.in_dose = StyledInput(text="7.5")
         self.in_dose.bind(text=self.recalculate_distance)
         c_dose.add_widget(self.in_dose)
-
         row1.add_widget(c_act)
         row1.add_widget(c_dose)
         box.add_widget(row1)
 
-        # حفاظ کلیماتور سرب
+        # ضخامت کلیماتور یا حفاظ
         c_sh = ModernCard(orientation='vertical', size_hint_y=None, height=dp(98), padding=dp(8), spacing=dp(4))
         c_sh.add_widget(Label(text=fa("ضخامت حفاظ سربی یا کلیماتور (mm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         self.in_lead = StyledInput(text="0")
@@ -222,7 +250,7 @@ class NDTApp(App):
         c_sh.add_widget(self.in_lead)
         box.add_widget(c_sh)
 
-        # کارت نتیجه دیجیتالی سبز فسفری با راهنمای استقرار اپراتور
+        # کارت سبز نتیجه: فاصله طناب‌کشی + موقعیت استقرار ایمن اپراتور
         self.dist_result_card = ModernCard(
             orientation='vertical',
             bg=(0.04, 0.17, 0.11, 0.98),
@@ -230,7 +258,7 @@ class NDTApp(App):
             radius=18,
             border_width=1.6,
             size_hint_y=None,
-            height=dp(152),
+            height=dp(156),
             padding=dp(12),
             spacing=dp(4)
         )
@@ -267,9 +295,11 @@ class NDTApp(App):
             gamma = iso["gamma"]
             hvl = iso["pb"]
 
+            # محاسبه تضعیف حفاظ سربی
             attenuation = 0.5 ** (lead_mm / hvl) if lead_mm > 0 else 1.0
             eff_a = A * attenuation
 
+            # تبدیل دوز از میکروسیورت به رنتگن: 1 R = 10,000 µSv
             dose_r_hr = dose_uSv / 10000.0
             d = math.sqrt((gamma * eff_a) / dose_r_hr)
 
@@ -279,9 +309,9 @@ class NDTApp(App):
             else:
                 self.lbl_dist_sub.text = fa(f"بدون حفاظ | ایزوتوپ: {iso['name']}")
 
-            # راهنمای محل استقرار اپراتور
-            op_safe_dist = d * 1.25  # حریم ایمن اپراتور حداقل ۲۵ درصد بیشتر از مرز طناب‌کشی
-            self.lbl_operator_pos.text = fa(f"👤 استقرار اپراتور / کنترل: خارج از شعاع {op_safe_dist:.1f} متری (با دوزیمتر)")
+            # استقرار اپراتور: فاصله ایمن ایستادن حداقل ۲۵٪ پشت خط قرمز طناب‌کشی
+            op_dist = d * 1.25
+            self.lbl_operator_pos.text = fa(f"👤 استقرار مجاز اپراتور: حداقل {op_dist:.1f} متری چشمه (با دوزیمتر فردی)")
         except Exception:
             self.lbl_dist_val.text = fa("خطا در ورودی")
             self.lbl_dist_sub.text = fa("مقادیر عددی صحیح وارد نمایید")
@@ -446,6 +476,13 @@ class NDTApp(App):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
         box.bind(minimum_height=box.setter('height'))
+
+        # بنر بالای تب تماس و شناسنامه (در صورت وجود)
+        banner_path = get_asset_path("company_banner.png")
+        if banner_path:
+            c_banner = ModernCard(size_hint_y=None, height=dp(120), padding=dp(4))
+            c_banner.add_widget(Image(source=banner_path, allow_stretch=True, keep_ratio=True))
+            box.add_widget(c_banner)
 
         for k, v in ISOTOPES.items():
             card = ModernCard(orientation='vertical', size_hint_y=None, height=dp(106), padding=dp(10), spacing=dp(4))
