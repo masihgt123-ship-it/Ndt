@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,jpeg,ttf,kv,atlas
 version = 1.0.0
 requirements = python3,kivy,arabic-reshaper,python-bidi
-
+icon.filename = %(source.dir)s/icon.png
 orientation = portrait
 fullscreen = 0
 
