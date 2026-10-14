@@ -3,7 +3,7 @@ title = NDT Gamma Pro
 package.name = ndtgamma
 package.domain = org.ndt
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,png,jpg,jpeg,ttf,kv,atlas
 version = 1.0.0
 requirements = python3,kivy,arabic-reshaper,python-bidi
 
