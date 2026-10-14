@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-import os
 import math
-import arabic_reshaper
-from bidi.algorithm import get_display
-
 from kivy.app import App
-from kivy.core.text import LabelBase
+from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
@@ -13,214 +9,355 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.image import Image
-from kivy.uix.popup import Popup
-from kivy.graphics import Color, RoundedRectangle
-from kivy.core.window import Window
-from kivy.resources import resource_add_path
+from kivy.uix.modalview import ModalView
+from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
 
-# مسیر فعلی برنامه
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-resource_add_path(BASE_DIR)
-
-# تنظیم و ثبت فونت فارسی
-FONT_FILE = os.path.join(BASE_DIR, 'font.ttf')
-if os.path.exists(FONT_FILE):
-    try:
-        LabelBase.register(name='VazirFont', fn_regular=FONT_FILE)
-        APP_FONT = 'VazirFont'
-    except Exception:
-        APP_FONT = 'Roboto'
-else:
-    APP_FONT = 'Roboto'
-
-def f(text):
-    """تبدیل متن فارسی به فرمت RTL صحیح"""
-    if not text:
-        return ""
-    try:
-        reshaped = arabic_reshaper.reshape(str(text))
+# RTL & Persian Text Reshaper
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    def fa(text):
+        if not text:
+            return ""
+        reshaped = arabic_reshaper.reshape(text)
         return get_display(reshaped)
-    except Exception:
-        return str(text)
+except ImportError:
+    def fa(text):
+        return text
 
+FONT_PATH = "font.ttf"
+
+# Data: Gamma constants (R * m^2 / (hr * Ci))
 ISOTOPES = {
-    'Ir-192': {'gamma': 0.48, 'name': 'ایریدیم ۱۹۲'},
-    'Se-75':  {'gamma': 0.20, 'name': 'سلنیوم ۷۵'},
-    'Co-60':  {'gamma': 1.30, 'name': 'کبالت ۶۰'},
-    'Cs-137': {'gamma': 0.32, 'name': 'سزیم ۱۳۷'}
+    "Ir-192": {"name": "Ir-192", "gamma": 0.48, "fa_name": "ایریدیوم ۱۹۲"},
+    "Se-75":  {"name": "Se-75",  "gamma": 0.20, "fa_name": "سلنیوم ۷۵"},
+    "Co-60":  {"name": "Co-60",  "gamma": 1.32, "fa_name": "کبالت ۶۰"},
+    "Cs-137": {"name": "Cs-137", "gamma": 0.33, "fa_name": "سزیوم ۱۳۷"}
 }
 
-class NDTGammaApp(App):
+COMPANY_PHONES = ["09122012248", "09121042253", "09121326011"]
+
+class RoundedCard(BoxLayout):
+    """کارت شیک تیره با گوشه‌های گرد مشابه طرح ۱"""
+    def __init__(self, bg_color=(0.11, 0.13, 0.16, 1), border_color=(0.18, 0.22, 0.27, 1), radius=16, **kwargs):
+        super(RoundedCard, self).__init__(**kwargs)
+        self.bg_color = bg_color
+        self.border_color = border_color
+        self.radius = radius
+        with self.canvas.before:
+            self.color_bg = Color(*self.bg_color)
+            self.rect_bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
+            self.color_line = Color(*self.border_color)
+            self.line_border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, self.radius], width=1.2)
+        self.bind(pos=self._update_shape, size=self._update_shape)
+
+    def _update_shape(self, *args):
+        self.rect_bg.pos = self.pos
+        self.rect_bg.size = self.size
+        self.line_border.rounded_rectangle = [self.x, self.y, self.width, self.height, self.radius]
+
+
+class NDTCalculatorApp(App):
     def build(self):
         Window.clearcolor = (0.07, 0.08, 0.09, 1)  # #121416
-        self.selected_iso = 'Ir-192'
+        self.selected_isotope = "Ir-192"
         self.iso_buttons = {}
 
-        root = BoxLayout(orientation='vertical', padding=12, spacing=10)
-
-        # 1. هدر بالا با لوگوی شرکت
-        header = BoxLayout(orientation='horizontal', size_hint_y=None, height=65, spacing=10)
-        
-        logo_path = os.path.join(BASE_DIR, 'logo.png')
-        if os.path.exists(logo_path):
-            logo_img = Image(source=logo_path, size_hint=(None, 1), width=65)
-            header.add_widget(logo_img)
-        
-        title_box = BoxLayout(orientation='vertical')
-        t1 = Label(text=f("محاسبه فاصله ایمن رادیوگرافی"), font_name=APP_FONT, font_size='17sp', bold=True, color=(1, 0.48, 0, 1))
-        t2 = Label(text="NDT Gamma Radiation Calculator", font_size='11sp', color=(0.7, 0.7, 0.7, 1))
-        title_box.add_widget(t1)
-        title_box.add_widget(t2)
-        header.add_widget(title_box)
-        root.add_widget(header)
-
-        # دکمه تماس با ما بالای صفحه
-        contact_bar = BoxLayout(size_hint_y=None, height=36)
-        btn_contact = Button(
-            text=f("اطلاعات شرکت و تماس با ما  ☎"),
-            font_name=APP_FONT,
-            font_size='13sp',
-            background_color=(0.2, 0.5, 0.9, 1)
-        )
-        btn_contact.bind(on_release=self.show_contact_popup)
-        contact_bar.add_widget(btn_contact)
-        root.add_widget(contact_bar)
-
-        # 2. اسکرول برای بخش ورودی‌ها
-        scroll = ScrollView(size_hint=(1, 1))
-        body = BoxLayout(orientation='vertical', spacing=10, size_hint_y=None)
-        body.bind(minimum_height=body.setter('height'))
-
-        # انتخاب چشمه
-        body.add_widget(Label(text=f("انتخاب ایزوتوپ پرتوزا:"), font_name=APP_FONT, font_size='14sp', size_hint_y=None, height=28, color=(1, 1, 1, 1)))
-        
-        iso_grid = GridLayout(cols=4, spacing=6, size_hint_y=None, height=45)
-        for iso_key in ISOTOPES.keys():
-            b = Button(text=iso_key, bold=True, font_size='13sp')
-            b.bind(on_release=lambda instance, k=iso_key: self.select_isotope(k))
-            self.iso_buttons[iso_key] = b
-            iso_grid.add_widget(b)
-        body.add_widget(iso_grid)
-        self.update_iso_buttons_ui()
-
-        # اکتیویته
-        body.add_widget(Label(text=f("اکتیویته چشمه (کوری - Curie):"), font_name=APP_FONT, font_size='13sp', size_hint_y=None, height=26, color=(0.85, 0.85, 0.85, 1)))
-        self.txt_act = TextInput(text="50", multiline=False, input_filter='float', size_hint_y=None, height=44, font_size='15sp')
-        body.add_widget(self.txt_act)
-
-        # حد دوز
-        body.add_widget(Label(text=f("حد دوز مجاز (میکروسِوِرت بر ساعت - μSv/h):"), font_name=APP_FONT, font_size='13sp', size_hint_y=None, height=26, color=(0.85, 0.85, 0.85, 1)))
-        self.txt_limit = TextInput(text="7.5", multiline=False, input_filter='float', size_hint_y=None, height=44, font_size='15sp')
-        body.add_widget(self.txt_limit)
-
-        # دکمه محاسبه
-        btn_calc = Button(
-            text=f("محاسبه فاصله ایمن (متر)"),
-            font_name=APP_FONT,
-            font_size='16sp',
-            bold=True,
+        # ریشه اسکرول‌پذیر برای پشتیبانی از تمام نمایشگرها
+        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False, do_scroll_y=True)
+        root = BoxLayout(
+            orientation='vertical',
             size_hint_y=None,
-            height=48,
-            background_color=(1, 0.48, 0, 1)
+            padding=[18, 16, 18, 20],
+            spacing=14
         )
-        btn_calc.bind(on_release=self.calculate_distance)
-        body.add_widget(btn_calc)
+        root.bind(minimum_height=root.setter('height'))
 
-        # کادر نمایش نتیجه
-        self.lbl_result = Label(
-            text=f("برای محاسبه دکمه بالا را بزنید"),
-            font_name=APP_FONT,
+        # ----------------- ۱. هدر و لوگوی بزرگ (مشابه طرح ۱) -----------------
+        header_box = BoxLayout(orientation='vertical', size_hint_y=None, height=150, spacing=4)
+        
+        # لوگوی دایره‌ای بالای صفحه
+        try:
+            logo_img = Image(source='logo.png', size_hint=(None, None), size=(76, 76), pos_hint={'center_x': 0.5})
+            header_box.add_widget(logo_img)
+        except Exception:
+            pass
+
+        title_lbl = Label(
+            text=fa("محاسبه‌گر فاصله ایمن"),
+            font_name=FONT_PATH,
+            font_size='22sp',
+            bold=True,
+            color=(0.95, 0.95, 0.97, 1),
+            size_hint_y=None,
+            height=34
+        )
+        company_btn = Button(
+            text=fa("شرکت رادیوگرافی صنعتی ایران  [ تماس ]"),
+            font_name=FONT_PATH,
+            font_size='13sp',
+            color=(1.0, 0.55, 0.1, 1),
+            background_normal='',
+            background_color=(0, 0, 0, 0),
+            size_hint_y=None,
+            height=26
+        )
+        company_btn.bind(on_release=self.show_contact_modal)
+        
+        header_box.add_widget(title_lbl)
+        header_box.add_widget(company_btn)
+        root.add_widget(header_box)
+
+        # ----------------- ۲. نوار هشدار ایمنی نارنجی -----------------
+        warning_banner = RoundedCard(
+            bg_color=(1.0, 0.48, 0.0, 0.95),  # نارنجی درخشان
+            border_color=(1.0, 0.6, 0.2, 1),
+            radius=12,
+            size_hint_y=None,
+            height=46,
+            padding=[10, 6]
+        )
+        warn_lbl = Label(
+            text=fa("⚠  هشدار ایمنی پرتوی  ⚠"),
+            font_name=FONT_PATH,
             font_size='15sp',
             bold=True,
-            size_hint_y=None,
-            height=65,
-            color=(0.2, 0.9, 0.3, 1)
+            color=(0.07, 0.07, 0.07, 1)
         )
-        body.add_widget(self.lbl_result)
+        warning_banner.add_widget(warn_lbl)
+        root.add_widget(warning_banner)
 
-        scroll.add_widget(body)
-        root.add_widget(scroll)
+        # ----------------- ۳. پنل انتخاب ایزوتوپ -----------------
+        iso_card = RoundedCard(
+            orientation='vertical',
+            size_hint_y=None,
+            height=100,
+            padding=[12, 10],
+            spacing=8
+        )
+        iso_title = Label(
+            text=fa("انتخاب ایزوتوپ"),
+            font_name=FONT_PATH,
+            font_size='14sp',
+            color=(0.78, 0.82, 0.88, 1),
+            size_hint_y=None,
+            height=20
+        )
+        iso_card.add_widget(iso_title)
 
-        return root
+        grid_iso = GridLayout(cols=4, spacing=8, size_hint_y=None, height=44)
+        for key in ["Ir-192", "Se-75", "Co-60", "Cs-137"]:
+            btn = Button(
+                text=key,
+                font_size='14sp',
+                bold=True,
+                background_normal='',
+                background_color=(1.0, 0.48, 0.0, 1) if key == "Ir-192" else (0.16, 0.19, 0.23, 1),
+                color=(1, 1, 1, 1)
+            )
+            btn.bind(on_release=lambda instance, k=key: self.select_isotope(k))
+            self.iso_buttons[key] = btn
+            grid_iso.add_widget(btn)
 
-    def select_isotope(self, iso_key):
-        self.selected_iso = iso_key
-        self.update_iso_buttons_ui()
+        iso_card.add_widget(grid_iso)
+        root.add_widget(iso_card)
 
-    def update_iso_buttons_ui(self):
-        for k, b in self.iso_buttons.items():
-            if k == self.selected_iso:
-                b.background_color = (1, 0.48, 0, 1)
-            else:
-                b.background_color = (0.25, 0.28, 0.32, 1)
+        # ----------------- ۴. ورودی‌های اکتیویته و حد دوز مجاز -----------------
+        inputs_row = BoxLayout(spacing=10, size_hint_y=None, height=105)
 
-    def calculate_distance(self, *args):
-        try:
-            curie = float(self.txt_act.text.strip())
-            limit = float(self.txt_limit.text.strip())
-            if limit <= 0 or curie <= 0:
-                self.lbl_result.text = f("خطا: مقادیر باید بزرگتر از صفر باشند")
-                self.lbl_result.color = (1, 0.2, 0.2, 1)
-                return
+        # کارت اکتیویته چشمه (Ci)
+        card_act = RoundedCard(orientation='vertical', padding=[10, 8], spacing=6)
+        card_act.add_widget(Label(
+            text=fa("اکتیویته چشمه (Ci)"),
+            font_name=FONT_PATH,
+            font_size='13sp',
+            color=(0.8, 0.83, 0.88, 1),
+            size_hint_y=None,
+            height=20
+        ))
+        self.input_activity = TextInput(
+            text="60",
+            multiline=False,
+            input_filter='float',
+            font_size='18sp',
+            halign='center',
+            background_normal='',
+            background_color=(0.08, 0.10, 0.12, 1),
+            foreground_color=(1, 1, 1, 1),
+            cursor_color=(1, 0.5, 0, 1),
+            padding=[8, 10]
+        )
+        card_act.add_widget(self.input_activity)
 
-            gamma = ISOTOPES[self.selected_iso]['gamma']
-            # فرمول: r = sqrt((A * Gamma * 1000) / Dose_Limit)
-            dist = math.sqrt((curie * gamma * 1000.0) / limit)
-            
-            res_text = f"فاصله ایمن مرزبندی: {dist:.2f} متر\nایزوتوپ: {self.selected_iso} | اکتیویته: {curie} Ci"
-            self.lbl_result.text = f(res_text)
-            self.lbl_result.color = (0.2, 1, 0.4, 1)
-        except Exception:
-            self.lbl_result.text = f("خطا در ورودی! لطفاً اعداد را درست وارد کنید")
-            self.lbl_result.color = (1, 0.2, 0.2, 1)
+        # کارت حد دوز مجاز (uSv/h)
+        card_dose = RoundedCard(orientation='vertical', padding=[10, 8], spacing=6)
+        card_dose.add_widget(Label(
+            text=fa("حد دوز مجاز (µSv/h)"),
+            font_name=FONT_PATH,
+            font_size='13sp',
+            color=(0.8, 0.83, 0.88, 1),
+            size_hint_y=None,
+            height=20
+        ))
+        self.input_dose = TextInput(
+            text="2.5",
+            multiline=False,
+            input_filter='float',
+            font_size='18sp',
+            halign='center',
+            background_normal='',
+            background_color=(0.08, 0.10, 0.12, 1),
+            foreground_color=(1, 1, 1, 1),
+            cursor_color=(1, 0.5, 0, 1),
+            padding=[8, 10]
+        )
+        card_dose.add_widget(self.input_dose)
 
-    def show_contact_popup(self, *args):
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=8)
+        inputs_row.add_widget(card_act)
+        inputs_row.add_widget(card_dose)
+        root.add_widget(inputs_row)
+
+        # ----------------- ۵. دکمه بزرگ نارنجی «محاسبه فاصله ایمن» -----------------
+        calc_btn = Button(
+            text=fa("محاسبه فاصله ایمن"),
+            font_name=FONT_PATH,
+            font_size='18sp',
+            bold=True,
+            size_hint_y=None,
+            height=54,
+            background_normal='',
+            background_color=(1.0, 0.48, 0.0, 1),
+            color=(0.08, 0.08, 0.08, 1)
+        )
+        calc_btn.bind(on_release=self.calculate)
+        root.add_widget(calc_btn)
+
+        # ----------------- ۶. کارت بزرگ سبز نمایش نتیجه (طرح ۱) -----------------
+        self.result_card = RoundedCard(
+            orientation='vertical',
+            bg_color=(0.04, 0.18, 0.12, 0.9),    # سبز تیره اشباع
+            border_color=(0.1, 0.8, 0.45, 1),   # حاشیه سبز نئونی
+            radius=16,
+            size_hint_y=None,
+            height=130,
+            padding=[14, 12],
+            spacing=4
+        )
         
-        banner_path = os.path.join(BASE_DIR, 'company_banner.png')
-        if os.path.exists(banner_path):
-            img = Image(source=banner_path, size_hint=(1, 0.45))
-            layout.add_widget(img)
-            
-        t_company = Label(
-            text=f("شرکت رادیوگرافی صنعتی ایران"),
-            font_name=APP_FONT,
+        self.lbl_res_title = Label(
+            text=fa("فاصله ایمن مرزبندی"),
+            font_name=FONT_PATH,
+            font_size='15sp',
+            color=(0.7, 0.95, 0.8, 1),
+            size_hint_y=None,
+            height=24
+        )
+        self.lbl_res_value = Label(
+            text=fa("--- متر"),
+            font_name=FONT_PATH,
+            font_size='34sp',
+            bold=True,
+            color=(0.15, 0.98, 0.55, 1),
+            size_hint_y=None,
+            height=50
+        )
+        self.lbl_res_detail = Label(
+            text=fa("آماده برای محاسبه"),
+            font_name=FONT_PATH,
+            font_size='12sp',
+            color=(0.6, 0.8, 0.7, 1),
+            size_hint_y=None,
+            height=20
+        )
+
+        self.result_card.add_widget(self.lbl_res_title)
+        self.result_card.add_widget(self.lbl_res_value)
+        self.result_card.add_widget(self.lbl_res_detail)
+        root.add_widget(self.result_card)
+
+        scroll.add_widget(root)
+        # محاسبه اولیه
+        self.calculate()
+        return scroll
+
+    def select_isotope(self, key):
+        self.selected_isotope = key
+        for k, btn in self.iso_buttons.items():
+            if k == key:
+                btn.background_color = (1.0, 0.48, 0.0, 1)
+                btn.color = (1, 1, 1, 1)
+            else:
+                btn.background_color = (0.16, 0.19, 0.23, 1)
+                btn.color = (0.8, 0.8, 0.8, 1)
+        self.calculate()
+
+    def calculate(self, *args):
+        try:
+            A = float(self.input_activity.text)
+            dose_uSv = float(self.input_dose.text)
+            if A <= 0 or dose_uSv <= 0:
+                raise ValueError()
+
+            # تبدیل حد دوز: 1 R = 10,000 uSv  =>  Dose(R/hr) = dose_uSv / 10000
+            # فرمول قانون عکس مجذور فاصله: R = Gamma * A / d^2  =>  d = sqrt(Gamma * A / (Dose_R))
+            gamma = ISOTOPES[self.selected_isotope]["gamma"]
+            dose_R = dose_uSv / 10000.0
+            distance_m = math.sqrt((gamma * A) / dose_R)
+
+            self.lbl_res_value.text = fa(f"{distance_m:.2f} متر")
+            detail = f"ایزوتوپ: {self.selected_isotope} | اکتیویته: {A} Ci"
+            self.lbl_res_detail.text = fa(detail)
+        except Exception:
+            self.lbl_res_value.text = fa("خطا در ورودی")
+            self.lbl_res_detail.text = fa("لطفاً مقادیر عددی صحیح وارد کنید")
+
+    def show_contact_modal(self, *args):
+        modal = ModalView(size_hint=(0.88, 0.55), auto_dismiss=True)
+        layout = RoundedCard(
+            orientation='vertical',
+            bg_color=(0.10, 0.12, 0.15, 0.98),
+            border_color=(1.0, 0.48, 0.0, 1),
+            padding=[18, 18],
+            spacing=10
+        )
+        
+        layout.add_widget(Label(
+            text=fa("شرکت رادیوگرافی صنعتی ایران"),
+            font_name=FONT_PATH,
             font_size='16sp',
             bold=True,
-            color=(1, 0.5, 0, 1),
-            size_hint_y=None,
-            height=30
-        )
-        layout.add_widget(t_company)
+            color=(1.0, 0.55, 0.1, 1)
+        ))
+        layout.add_widget(Label(
+            text=fa("ارائه‌دهنده خدمات تخصصی آزمون‌های غیرمخرب (NDT)"),
+            font_name=FONT_PATH,
+            font_size='12sp',
+            color=(0.8, 0.85, 0.9, 1)
+        ))
+        
+        for p in COMPANY_PHONES:
+            layout.add_widget(Label(
+                text=f"📞 {p}",
+                font_size='15sp',
+                bold=True,
+                color=(0.2, 0.9, 0.5, 1)
+            ))
 
-        t_phones = Label(
-            text="09122012248\n09121042253\n09121326011",
+        close_btn = Button(
+            text=fa("بستن"),
+            font_name=FONT_PATH,
             font_size='14sp',
-            bold=True,
-            color=(1, 1, 1, 1),
             size_hint_y=None,
-            height=60
+            height=42,
+            background_normal='',
+            background_color=(0.2, 0.25, 0.3, 1)
         )
-        layout.add_widget(t_phones)
+        close_btn.bind(on_release=modal.dismiss)
+        layout.add_widget(close_btn)
 
-        btn_close = Button(
-            text=f("بستن"),
-            font_name=APP_FONT,
-            size_hint=(1, None),
-            height=40,
-            background_color=(0.8, 0.2, 0.2, 1)
-        )
-        layout.add_widget(btn_close)
+        modal.add_widget(layout)
+        modal.open()
 
-        popup = Popup(
-            title=f("اطلاعات تماس"),
-            title_font=APP_FONT,
-            content=layout,
-            size_hint=(0.9, 0.75),
-            auto_dismiss=True
-        )
-        btn_close.bind(on_release=popup.dismiss)
-        popup.open()
 
 if __name__ == '__main__':
-    NDTGammaApp().run()
+    NDTCalculatorApp().run()
