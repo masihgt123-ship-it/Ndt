@@ -27,7 +27,7 @@ except ImportError:
 
 FONT_PATH = "font.ttf"
 
-# مقادیر ثابت پرتودهی گاما بر حسب (R * m^2 / (hr * Ci))
+# ثابت‌های دقیق گاما برای ایزوتوپ‌های صنعتی (R * m^2 / (hr * Ci))
 ISOTOPES = {
     "Ir-192": {"name": "Ir-192", "gamma": 0.48, "fa_name": "ایریدیوم ۱۹۲"},
     "Se-75":  {"name": "Se-75",  "gamma": 0.20, "fa_name": "سلنیوم ۷۵"},
@@ -60,7 +60,7 @@ class RoundedCard(BoxLayout):
 
 class NDTCalculatorApp(App):
     def build(self):
-        Window.clearcolor = (0.07, 0.08, 0.09, 1)  # پس‌زمینه زغالی ایمنی
+        Window.clearcolor = (0.07, 0.08, 0.09, 1)  # پس‌زمینه تیره صنعتی
         self.selected_isotope = "Ir-192"
         self.iso_buttons = {}
 
@@ -302,9 +302,10 @@ class NDTCalculatorApp(App):
             if A <= 0 or dose_uSv <= 0:
                 raise ValueError()
 
-            # رابطه قانون عکس مجذور فاصله: Dose_Rate (R/h) = (Gamma * A) / d^2
-            # تبدیل حد دوز: 1 R/h = 10,000 µSv/h  =>  Dose(R/h) = dose_uSv / 10000
-            # d = sqrt((Gamma * A) / Dose(R/h))
+            # فرمول استاندارد حفاظت در برابر اشعه (قانون عکس مجذور فاصله)
+            # Gamma unit: R * m^2 / (hr * Ci)
+            # Dose limit in R/hr = dose_uSv / 10000
+            # Distance (m) = sqrt( (Gamma * A) / Dose_R_hr )
             gamma = ISOTOPES[self.selected_isotope]["gamma"]
             dose_R_hr = dose_uSv / 10000.0
             distance_m = math.sqrt((gamma * A) / dose_R_hr)
