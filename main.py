@@ -13,7 +13,6 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.graphics import Color, RoundedRectangle, Line
 
-# تشخیص مسیر اجرایی برنامه روی اندروید برای لود قطعی تصاویر
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset_path(filename):
@@ -39,10 +38,10 @@ font_file = get_asset_path("font.ttf")
 FONT_PATH = font_file if font_file else "Roboto"
 
 ISOTOPES = {
-    "Ir-192": {"name": "Ir-192", "fa": "ایریدیوم ۱۹۲", "gamma": 0.48, "hl": 73.83, "pb": 5.0, "fe": 13.0},
-    "Se-75":  {"name": "Se-75",  "fa": "سلنیوم ۷۵",  "gamma": 0.20, "hl": 119.8, "pb": 2.5, "fe": 8.0},
-    "Co-60":  {"name": "Co-60",  "fa": "کبالت ۶۰",   "gamma": 1.32, "hl": 1925.0,"pb": 12.5,"fe": 22.0},
-    "Cs-137": {"name": "Cs-137", "fa": "سزیوم ۱۳۷",  "gamma": 0.33, "hl": 11000.0,"pb": 6.5,"fe": 16.0}
+    "Ir-192": {"name": "Ir-192", "fa": "ایریدیوم ۱۹۲", "gamma": 0.48, "hl": 73.83, "pb": 5.0, "fe": 13.0, "base_factor": 1.4},
+    "Se-75":  {"name": "Se-75",  "fa": "سلنیوم ۷۵",  "gamma": 0.20, "hl": 119.8, "pb": 2.5, "fe": 8.0,  "base_factor": 2.2},
+    "Co-60":  {"name": "Co-60",  "fa": "کبالت ۶۰",   "gamma": 1.32, "hl": 1925.0,"pb": 12.5,"fe": 22.0, "base_factor": 0.6},
+    "Cs-137": {"name": "Cs-137", "fa": "سزیوم ۱۳۷",  "gamma": 0.33, "hl": 11000.0,"pb": 6.5,"fe": 16.0, "base_factor": 1.9}
 }
 
 
@@ -96,9 +95,7 @@ class NDTApp(App):
 
         root = BoxLayout(orientation='vertical')
 
-        # ------------------------------------------------------------------
-        # هدر اصلی: شامل لوگوی شرکت + نام شرکت (بدون متن اضافه)
-        # ------------------------------------------------------------------
+        # ----------------- نوار هدر (فقط نام شرکت + لوگو) -----------------
         header = ModernCard(
             orientation='horizontal',
             bg=(0.09, 0.10, 0.12, 1),
@@ -111,19 +108,18 @@ class NDTApp(App):
             spacing=dp(10)
         )
 
-        # لوگوی شرکت در سمت چپ یا کنار نام
         logo_path = get_asset_path("logo.png") or get_asset_path("icon.png")
         if logo_path:
             logo_img = Image(
                 source=logo_path,
                 size_hint=(None, None),
-                size=(dp(48), dp(48)),
+                size=(dp(46), dp(46)),
                 allow_stretch=True,
                 keep_ratio=True
             )
             header.add_widget(logo_img)
 
-        # عنوان سربرگ (فقط نام شرکت)
+        # عنوان: بدون هیچ متن اضافه‌ای، منحصراً نام شرکت
         h_title = Label(
             text=fa("شرکت رادیوگرافی صنعتی ایران"),
             font_name=FONT_PATH,
@@ -137,31 +133,31 @@ class NDTApp(App):
         header.add_widget(h_title)
         root.add_widget(header)
 
-        # کانتینر اصلی تب‌ها
+        # فضای میانی برای تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
-        # نوار پایین (Bottom Navigation)
-        nav_wrapper = BoxLayout(
+        # نوار پایین
+        nav = BoxLayout(
             orientation='horizontal',
             size_hint_y=None,
-            height=dp(62),
-            padding=[dp(8), dp(6), dp(8), dp(6)],
+            height=dp(60),
+            padding=[dp(6), dp(6), dp(6), dp(6)],
             spacing=dp(6)
         )
-        with nav_wrapper.canvas.before:
+        with nav.canvas.before:
             Color(0.08, 0.09, 0.11, 1)
-            RoundedRectangle(pos=nav_wrapper.pos, size=nav_wrapper.size)
+            RoundedRectangle(pos=nav.pos, size=nav.size)
 
         self.tab_buttons = {}
-        tabs_data = [
+        tabs = [
             ("distance", fa("مرزبندی و حفاظ")),
             ("decay", fa("واپاشی روز")),
             ("exposure", fa("زمان پرتودهی")),
             ("specs", fa("شناسنامه ایزوتوپ"))
         ]
 
-        for tid, label in tabs_data:
+        for tid, label in tabs:
             btn = Button(
                 text=label,
                 font_name=FONT_PATH,
@@ -173,10 +169,10 @@ class NDTApp(App):
             )
             btn.bind(on_release=lambda inst, t=tid: self.switch_view(t))
             self.tab_buttons[tid] = btn
-            nav_wrapper.add_widget(btn)
+            nav.add_widget(btn)
 
-        root.add_widget(nav_wrapper)
-        self.switch_view("distance")
+        root.add_widget(nav)
+        self.switch_view("exposure")
         return root
 
     def switch_view(self, tab_id):
@@ -189,7 +185,6 @@ class NDTApp(App):
                 btn.color = (0.75, 0.80, 0.85, 1)
 
         self.container.clear_widgets()
-
         if tab_id == "distance":
             self.container.add_widget(self.render_distance_screen())
         elif tab_id == "decay":
@@ -199,21 +194,153 @@ class NDTApp(App):
         elif tab_id == "specs":
             self.container.add_widget(self.render_specs_screen())
 
-    # ================= 1. تب مرزبندی و حفاظ =================
+    # ----------------- صفحه زمان پرتودهی (اصلاح‌شده) -----------------
+    def render_exposure_screen(self):
+        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
+        box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
+        box.bind(minimum_height=box.setter('height'))
+
+        # انتخاب ایزوتوپ برای محاسبه زمان
+        c_iso = ModernCard(orientation='vertical', size_hint_y=None, height=dp(88), padding=dp(8), spacing=dp(6))
+        c_iso.add_widget(Label(text=fa("ایزوتوپ پرتودهی"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        grid = GridLayout(cols=4, spacing=dp(6), size_hint_y=None, height=dp(38))
+        self.exp_iso_btns = {}
+        for k in ["Ir-192", "Se-75", "Co-60", "Cs-137"]:
+            b = Button(
+                text=k,
+                font_size=sp(13),
+                bold=True,
+                background_normal='',
+                background_color=(1.0, 0.48, 0.0, 1) if k == self.current_iso else (0.16, 0.19, 0.23, 1),
+                color=(1, 1, 1, 1)
+            )
+            b.bind(on_release=lambda inst, key=k: self.select_exp_iso(key))
+            self.exp_iso_btns[k] = b
+            grid.add_widget(b)
+        c_iso.add_widget(grid)
+        box.add_widget(c_iso)
+
+        # ردیف اکتیویته و ضخامت
+        r1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
+        c_act = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
+        c_act.add_widget(Label(text=fa("اکتیویته (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        self.in_exp_a = StyledInput(text="40")
+        self.in_exp_a.bind(text=self.recalculate_exposure)
+        c_act.add_widget(self.in_exp_a)
+
+        c_th = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
+        c_th.add_widget(Label(text=fa("ضخامت فولاد (mm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        self.in_exp_th = StyledInput(text="23")
+        self.in_exp_th.bind(text=self.recalculate_exposure)
+        c_th.add_widget(self.in_exp_th)
+        r1.add_widget(c_act)
+        r1.add_widget(c_th)
+        box.add_widget(r1)
+
+        # ردیف فاصله SFD و فاکتور فیلم
+        r2 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
+        c_sfd = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
+        c_sfd.add_widget(Label(text=fa("فاصله SFD (cm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        self.in_exp_sfd = StyledInput(text="50")
+        self.in_exp_sfd.bind(text=self.recalculate_exposure)
+        c_sfd.add_widget(self.in_exp_sfd)
+
+        c_ff = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
+        c_ff.add_widget(Label(text=fa("فاکتور فیلم (D7=1 , D4=3)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        self.in_exp_ff = StyledInput(text="1.0")
+        self.in_exp_ff.bind(text=self.recalculate_exposure)
+        c_ff.add_widget(self.in_exp_ff)
+        r2.add_widget(c_sfd)
+        r2.add_widget(c_ff)
+        box.add_widget(r2)
+
+        # کارت خروجی زمان پرتودهی
+        self.c_exp_res = ModernCard(
+            orientation='vertical',
+            bg=(0.20, 0.12, 0.04, 0.98),
+            border=(1.0, 0.65, 0.1, 1),
+            radius=18,
+            size_hint_y=None,
+            height=dp(140),
+            padding=dp(12),
+            spacing=dp(4)
+        )
+        self.c_exp_res.add_widget(Label(text=fa("زمان پرتودهی محاسبه‌شده (Exposure Time)"), font_name=FONT_PATH, font_size=sp(13), color=(1, 0.85, 0.6, 1)))
+        self.lbl_exp_val = Label(text="---", font_name=FONT_PATH, font_size=sp(30), bold=True, color=(1, 0.72, 0.15, 1))
+        self.lbl_exp_sub = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.9, 0.8, 0.7, 1))
+        self.c_exp_res.add_widget(self.lbl_exp_val)
+        self.c_exp_res.add_widget(self.lbl_exp_sub)
+        box.add_widget(self.c_exp_res)
+
+        scroll.add_widget(box)
+        self.recalculate_exposure()
+        return scroll
+
+    def select_exp_iso(self, key):
+        self.current_iso = key
+        for k, btn in getattr(self, 'exp_iso_btns', {}).items():
+            btn.background_color = (1.0, 0.48, 0.0, 1) if k == key else (0.16, 0.19, 0.23, 1)
+        self.recalculate_exposure()
+
+    def recalculate_exposure(self, *args):
+        try:
+            txt_a = self.in_exp_a.text.strip()
+            txt_th = self.in_exp_th.text.strip()
+            txt_sfd = self.in_exp_sfd.text.strip()
+            txt_ff = self.in_exp_ff.text.strip()
+
+            if not txt_a or not txt_th or not txt_sfd:
+                self.lbl_exp_val.text = fa("در انتظار ورودی...")
+                self.lbl_exp_sub.text = fa("لطفاً مقادیر را تکمیل نمایید")
+                return
+
+            A = float(txt_a)
+            th = float(txt_th)
+            sfd_cm = float(txt_sfd)
+            ff = float(txt_ff) if txt_ff else 1.0
+
+            if A <= 0 or sfd_cm <= 0 or ff <= 0 or th < 0:
+                raise ValueError()
+
+            iso = ISOTOPES[self.current_iso]
+            hvl_fe = iso["fe"]
+            base_factor = iso.get("base_factor", 1.4)
+
+            # فرمول استاندارد اکسپوژر:
+            # زمان (دقیقه) = (Base × FF × 2^(Thickness/HVL) × (SFD_cm / 50)^2 ) / (A / 10)
+            sfd_ratio = (sfd_cm / 50.0) ** 2
+            half_value_layers = th / hvl_fe
+            attenuation = 2.0 ** half_value_layers
+            
+            t_total_seconds = (base_factor * ff * attenuation * sfd_ratio * 120.0) / (A / 10.0)
+            
+            mins = int(t_total_seconds // 60)
+            secs = int(t_total_seconds % 60)
+
+            if mins > 0:
+                self.lbl_exp_val.text = fa(f"{mins} دقیقه و {secs} ثانیه")
+            else:
+                self.lbl_exp_val.text = fa(f"{secs} ثانیه")
+
+            self.lbl_exp_sub.text = fa(f"ایزوتوپ: {self.current_iso} | تعداد HVL: {half_value_layers:.1f} | SFD: {sfd_cm:.0f}cm")
+        except Exception:
+            self.lbl_exp_val.text = fa("خطا در ورودی")
+            self.lbl_exp_sub.text = fa("لطفاً فقط اعداد مجاز وارد کنید")
+
+    # ----------------- صفحه مرزبندی و ایمنی -----------------
     def render_distance_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
         box.bind(minimum_height=box.setter('height'))
 
-        # انتخاب ایزوتوپ
-        c_iso = ModernCard(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(10), spacing=dp(8))
-        c_iso.add_widget(Label(text=fa("انتخاب ایزوتوپ صنعتی"), font_name=FONT_PATH, font_size=sp(13), color=(0.85, 0.88, 0.92, 1)))
-        grid = GridLayout(cols=4, spacing=dp(8), size_hint_y=None, height=dp(44))
+        c_iso = ModernCard(orientation='vertical', size_hint_y=None, height=dp(94), padding=dp(8), spacing=dp(6))
+        c_iso.add_widget(Label(text=fa("انتخاب ایزوتوپ"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
+        grid = GridLayout(cols=4, spacing=dp(6), size_hint_y=None, height=dp(40))
         self.dist_btns = {}
         for k in ["Ir-192", "Se-75", "Co-60", "Cs-137"]:
             b = Button(
                 text=k,
-                font_size=sp(14),
+                font_size=sp(13),
                 bold=True,
                 background_normal='',
                 background_color=(1.0, 0.48, 0.0, 1) if k == self.current_iso else (0.16, 0.19, 0.23, 1),
@@ -225,8 +352,7 @@ class NDTApp(App):
         c_iso.add_widget(grid)
         box.add_widget(c_iso)
 
-        # ردیف اکتیویته و حد دوز
-        row1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(102))
+        r1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
         c_act = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
         c_act.add_widget(Label(text=fa("اکتیویته (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         self.in_act = StyledInput(text="40")
@@ -238,40 +364,36 @@ class NDTApp(App):
         self.in_dose = StyledInput(text="7.5")
         self.in_dose.bind(text=self.recalculate_distance)
         c_dose.add_widget(self.in_dose)
-        row1.add_widget(c_act)
-        row1.add_widget(c_dose)
-        box.add_widget(row1)
+        r1.add_widget(c_act)
+        r1.add_widget(c_dose)
+        box.add_widget(r1)
 
-        # ضخامت کلیماتور یا حفاظ
-        c_sh = ModernCard(orientation='vertical', size_hint_y=None, height=dp(98), padding=dp(8), spacing=dp(4))
+        c_sh = ModernCard(orientation='vertical', size_hint_y=None, height=dp(94), padding=dp(8), spacing=dp(4))
         c_sh.add_widget(Label(text=fa("ضخامت حفاظ سربی یا کلیماتور (mm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         self.in_lead = StyledInput(text="0")
         self.in_lead.bind(text=self.recalculate_distance)
         c_sh.add_widget(self.in_lead)
         box.add_widget(c_sh)
 
-        # کارت سبز نتیجه: فاصله طناب‌کشی + موقعیت استقرار ایمن اپراتور
-        self.dist_result_card = ModernCard(
+        self.dist_res = ModernCard(
             orientation='vertical',
             bg=(0.04, 0.17, 0.11, 0.98),
             border=(0.15, 0.95, 0.50, 1),
             radius=18,
-            border_width=1.6,
             size_hint_y=None,
-            height=dp(156),
-            padding=dp(12),
-            spacing=dp(4)
+            height=dp(150),
+            padding=dp(10),
+            spacing=dp(3)
         )
-        self.lbl_dist_title = Label(text=fa("شعاع فاصله ایمن مرزبندی (طناب‌کشی)"), font_name=FONT_PATH, font_size=sp(14), color=(0.8, 0.98, 0.85, 1))
-        self.lbl_dist_val = Label(text="---", font_name=FONT_PATH, font_size=sp(34), bold=True, color=(0.2, 0.98, 0.55, 1))
+        self.lbl_dist_title = Label(text=fa("شعاع فاصله طناب‌کشی ایمن"), font_name=FONT_PATH, font_size=sp(13), color=(0.8, 0.98, 0.85, 1))
+        self.lbl_dist_val = Label(text="---", font_name=FONT_PATH, font_size=sp(32), bold=True, color=(0.2, 0.98, 0.55, 1))
         self.lbl_dist_sub = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.7, 0.85, 0.8, 1))
         self.lbl_operator_pos = Label(text="", font_name=FONT_PATH, font_size=sp(11), bold=True, color=(1, 0.85, 0.4, 1))
-
-        self.dist_result_card.add_widget(self.lbl_dist_title)
-        self.dist_result_card.add_widget(self.lbl_dist_val)
-        self.dist_result_card.add_widget(self.lbl_dist_sub)
-        self.dist_result_card.add_widget(self.lbl_operator_pos)
-        box.add_widget(self.dist_result_card)
+        self.dist_res.add_widget(self.lbl_dist_title)
+        self.dist_res.add_widget(self.lbl_dist_val)
+        self.dist_res.add_widget(self.lbl_dist_sub)
+        self.dist_res.add_widget(self.lbl_operator_pos)
+        box.add_widget(self.dist_res)
 
         scroll.add_widget(box)
         self.recalculate_distance()
@@ -295,35 +417,27 @@ class NDTApp(App):
             gamma = iso["gamma"]
             hvl = iso["pb"]
 
-            # محاسبه تضعیف حفاظ سربی
             attenuation = 0.5 ** (lead_mm / hvl) if lead_mm > 0 else 1.0
             eff_a = A * attenuation
-
-            # تبدیل دوز از میکروسیورت به رنتگن: 1 R = 10,000 µSv
             dose_r_hr = dose_uSv / 10000.0
             d = math.sqrt((gamma * eff_a) / dose_r_hr)
 
             self.lbl_dist_val.text = fa(f"{d:.1f} متر")
-            if lead_mm > 0:
-                self.lbl_dist_sub.text = fa(f"با {lead_mm}mm سرب | اکتیویته مؤثر: {eff_a:.2f} Ci")
-            else:
-                self.lbl_dist_sub.text = fa(f"بدون حفاظ | ایزوتوپ: {iso['name']}")
-
-            # استقرار اپراتور: فاصله ایمن ایستادن حداقل ۲۵٪ پشت خط قرمز طناب‌کشی
-            op_dist = d * 1.25
-            self.lbl_operator_pos.text = fa(f"👤 استقرار مجاز اپراتور: حداقل {op_dist:.1f} متری چشمه (با دوزیمتر فردی)")
+            self.lbl_dist_sub.text = fa(f"ایزوتوپ: {iso['name']} | تضعیف حفاظ: {attenuation:.2f}")
+            op_d = d * 1.25
+            self.lbl_operator_pos.text = fa(f"👤 استقرار مجاز اپراتور: حداقل {op_d:.1f} متری چشمه")
         except Exception:
             self.lbl_dist_val.text = fa("خطا در ورودی")
-            self.lbl_dist_sub.text = fa("مقادیر عددی صحیح وارد نمایید")
+            self.lbl_dist_sub.text = fa("مقادیر معتبر وارد نمایید")
             self.lbl_operator_pos.text = fa("")
 
-    # ================= 2. تب محاسبه واپاشی =================
+    # ----------------- صفحه واپاشی -----------------
     def render_decay_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
         box.bind(minimum_height=box.setter('height'))
 
-        row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(102))
+        row = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
         c1 = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
         c1.add_widget(Label(text=fa("اکتیویته اولیه (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         self.in_decay_a0 = StyledInput(text="80")
@@ -346,20 +460,20 @@ class NDTApp(App):
             border=(0.2, 0.65, 0.95, 1),
             radius=18,
             size_hint_y=None,
-            height=dp(136),
-            padding=dp(12),
-            spacing=dp(4)
+            height=dp(130),
+            padding=dp(10),
+            spacing=dp(3)
         )
-        c_res.add_widget(Label(text=fa("اکتیویته دقیق روز جاری"), font_name=FONT_PATH, font_size=sp(14), color=(0.75, 0.9, 1, 1)))
-        self.lbl_decay_val = Label(text="---", font_name=FONT_PATH, font_size=sp(36), bold=True, color=(0.3, 0.8, 1, 1))
-        self.lbl_decay_sub = Label(text="", font_name=FONT_PATH, font_size=sp(12), color=(0.7, 0.85, 0.9, 1))
+        c_res.add_widget(Label(text=fa("اکتیویته دقیق روز جاری"), font_name=FONT_PATH, font_size=sp(13), color=(0.75, 0.9, 1, 1)))
+        self.lbl_decay_val = Label(text="---", font_name=FONT_PATH, font_size=sp(32), bold=True, color=(0.3, 0.8, 1, 1))
+        self.lbl_decay_sub = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.7, 0.85, 0.9, 1))
         c_res.add_widget(self.lbl_decay_val)
         c_res.add_widget(self.lbl_decay_sub)
         box.add_widget(c_res)
 
-        c_plaque = ModernCard(orientation='vertical', size_hint_y=None, height=dp(210), padding=dp(12), spacing=dp(4))
-        c_plaque.add_widget(Label(text=fa("جدول پلاک روزانه (۷ روز آینده)"), font_name=FONT_PATH, font_size=sp(13), bold=True, color=(1, 0.7, 0.2, 1)))
-        self.lbl_plaque = Label(text="", font_name=FONT_PATH, font_size=sp(12), color=(0.85, 0.85, 0.85, 1))
+        c_plaque = ModernCard(orientation='vertical', size_hint_y=None, height=dp(200), padding=dp(10), spacing=dp(3))
+        c_plaque.add_widget(Label(text=fa("جدول پلاک روزانه (۷ روز آینده)"), font_name=FONT_PATH, font_size=sp(12), bold=True, color=(1, 0.7, 0.2, 1)))
+        self.lbl_plaque = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.85, 0.85, 0.85, 1))
         c_plaque.add_widget(self.lbl_plaque)
         box.add_widget(c_plaque)
 
@@ -391,93 +505,12 @@ class NDTApp(App):
             self.lbl_decay_sub.text = fa("ورودی نامعتبر")
             self.lbl_plaque.text = ""
 
-    # ================= 3. تب زمان پرتودهی =================
-    def render_exposure_screen(self):
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
-        box.bind(minimum_height=box.setter('height'))
-
-        r1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(102))
-        c_act = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
-        c_act.add_widget(Label(text=fa("اکتیویته (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
-        self.in_exp_a = StyledInput(text="40")
-        self.in_exp_a.bind(text=self.recalculate_exposure)
-        c_act.add_widget(self.in_exp_a)
-
-        c_th = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
-        c_th.add_widget(Label(text=fa("ضخامت فولاد (mm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
-        self.in_exp_th = StyledInput(text="15")
-        self.in_exp_th.bind(text=self.recalculate_exposure)
-        c_th.add_widget(self.in_exp_th)
-        r1.add_widget(c_act)
-        r1.add_widget(c_th)
-        box.add_widget(r1)
-
-        r2 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(102))
-        c_sfd = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
-        c_sfd.add_widget(Label(text=fa("فاصله SFD (cm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
-        self.in_exp_sfd = StyledInput(text="50")
-        self.in_exp_sfd.bind(text=self.recalculate_exposure)
-        c_sfd.add_widget(self.in_exp_sfd)
-
-        c_ff = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
-        c_ff.add_widget(Label(text=fa("فاکتور فیلم (D4=3 , D7=1)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
-        self.in_exp_ff = StyledInput(text="1.2")
-        self.in_exp_ff.bind(text=self.recalculate_exposure)
-        c_ff.add_widget(self.in_exp_ff)
-        r2.add_widget(c_sfd)
-        r2.add_widget(c_ff)
-        box.add_widget(r2)
-
-        c_res = ModernCard(
-            orientation='vertical',
-            bg=(0.20, 0.12, 0.04, 0.98),
-            border=(1.0, 0.65, 0.1, 1),
-            radius=18,
-            size_hint_y=None,
-            height=dp(136),
-            padding=dp(12),
-            spacing=dp(4)
-        )
-        c_res.add_widget(Label(text=fa("زمان پرتودهی محاسبه‌شده (Exposure Time)"), font_name=FONT_PATH, font_size=sp(14), color=(1, 0.85, 0.6, 1)))
-        self.lbl_exp_val = Label(text="---", font_name=FONT_PATH, font_size=sp(32), bold=True, color=(1, 0.72, 0.15, 1))
-        self.lbl_exp_sub = Label(text="", font_name=FONT_PATH, font_size=sp(12), color=(0.9, 0.8, 0.7, 1))
-        c_res.add_widget(self.lbl_exp_val)
-        c_res.add_widget(self.lbl_exp_sub)
-        box.add_widget(c_res)
-
-        scroll.add_widget(box)
-        self.recalculate_exposure()
-        return scroll
-
-    def recalculate_exposure(self, *args):
-        try:
-            A = float(self.in_exp_a.text)
-            th = float(self.in_exp_th.text)
-            sfd = float(self.in_exp_sfd.text)
-            ff = float(self.in_exp_ff.text)
-            if A <= 0 or sfd <= 0 or ff <= 0:
-                raise ValueError()
-
-            hvl_fe = ISOTOPES[self.current_iso]["fe"]
-            sfd_m = sfd / 100.0
-            t_min = (ff * (2 ** (th / hvl_fe)) * (sfd_m ** 2) * 6.0) / A
-            mins = int(t_min)
-            secs = int((t_min - mins) * 60)
-
-            self.lbl_exp_val.text = fa(f"{mins} دقیقه و {secs} ثانیه")
-            self.lbl_exp_sub.text = fa(f"ایزوتوپ: {self.current_iso} | ضخامت: {th}mm")
-        except Exception:
-            self.lbl_exp_val.text = fa("خطا در ورودی")
-            self.lbl_exp_sub.text = fa("مقادیر را چک فرمایید")
-
-    # ================= 4. تب شناسنامه و تماس =================
+    # ----------------- صفحه تماس و شناسنامه -----------------
     def render_specs_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
         box.bind(minimum_height=box.setter('height'))
 
-        # بنر بالای تب تماس و شناسنامه (در صورت وجود)
         banner_path = get_asset_path("company_banner.png")
         if banner_path:
             c_banner = ModernCard(size_hint_y=None, height=dp(120), padding=dp(4))
@@ -485,8 +518,8 @@ class NDTApp(App):
             box.add_widget(c_banner)
 
         for k, v in ISOTOPES.items():
-            card = ModernCard(orientation='vertical', size_hint_y=None, height=dp(106), padding=dp(10), spacing=dp(4))
-            card.add_widget(Label(text=fa(f"ایزوتوپ {v['name']} ({v['fa']})"), font_name=FONT_PATH, font_size=sp(14), bold=True, color=(1, 0.6, 0.1, 1)))
+            card = ModernCard(orientation='vertical', size_hint_y=None, height=dp(100), padding=dp(8), spacing=dp(3))
+            card.add_widget(Label(text=fa(f"ایزوتوپ {v['name']} ({v['fa']})"), font_name=FONT_PATH, font_size=sp(13), bold=True, color=(1, 0.6, 0.1, 1)))
             card.add_widget(Label(text=f"Gamma Constant: {v['gamma']} R.m2/hr.Ci | Half-Life: {v['hl']} days", font_size=sp(11), color=(0.85, 0.85, 0.9, 1)))
             card.add_widget(Label(text=f"HVL Lead: {v['pb']} mm | HVL Steel: {v['fe']} mm", font_size=sp(11), color=(0.7, 0.85, 0.8, 1)))
             box.add_widget(card)
@@ -496,13 +529,13 @@ class NDTApp(App):
             bg=(0.10, 0.12, 0.16, 1),
             border=(1, 0.48, 0, 1),
             size_hint_y=None,
-            height=dp(150),
-            padding=dp(12),
-            spacing=dp(4)
+            height=dp(140),
+            padding=dp(10),
+            spacing=dp(3)
         )
-        contact.add_widget(Label(text=fa("شرکت رادیوگرافی صنعتی ایران"), font_name=FONT_PATH, font_size=sp(15), bold=True, color=(1, 0.65, 0.1, 1)))
+        contact.add_widget(Label(text=fa("شرکت رادیوگرافی صنعتی ایران"), font_name=FONT_PATH, font_size=sp(14), bold=True, color=(1, 0.65, 0.1, 1)))
         for p in ["09122012248", "09121042253", "09121326011"]:
-            contact.add_widget(Label(text=f"📞  {p}", font_size=sp(14), bold=True, color=(0.2, 0.9, 0.5, 1)))
+            contact.add_widget(Label(text=f"📞  {p}", font_size=sp(13), bold=True, color=(0.2, 0.9, 0.5, 1)))
         box.add_widget(contact)
 
         scroll.add_widget(box)
