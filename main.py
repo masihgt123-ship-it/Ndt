@@ -4,6 +4,7 @@ import os
 from kivy.app import App
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
@@ -11,16 +12,21 @@ from kivy.uix.label import Label
 from kivy.uix.image import Image
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset_path(filename):
-    p = os.path.join(BASE_DIR, filename)
-    if os.path.exists(p):
-        return p
-    if os.path.exists(filename):
-        return filename
+    # جستجو در مسیر دقیق و مسیرهای جانبی اندروید
+    paths_to_check = [
+        os.path.join(BASE_DIR, filename),
+        filename,
+        os.path.join(os.getcwd(), filename),
+        os.path.join(BASE_DIR, "..", filename)
+    ]
+    for p in paths_to_check:
+        if os.path.isfile(p):
+            return p
     return None
 
 try:
@@ -46,7 +52,7 @@ ISOTOPES = {
 
 
 class ModernCard(BoxLayout):
-    def __init__(self, bg=(0.11, 0.13, 0.16, 1), border=(0.20, 0.24, 0.30, 1), radius=16, border_width=1.2, **kwargs):
+    def __init__(self, bg=(0.10, 0.12, 0.15, 0.92), border=(0.20, 0.24, 0.30, 0.9), radius=16, border_width=1.2, **kwargs):
         super(ModernCard, self).__init__(**kwargs)
         self.bg_color = bg
         self.border_color = border
@@ -75,7 +81,7 @@ class StyledInput(TextInput):
         self.halign = 'center'
         self.background_normal = ''
         self.background_active = ''
-        self.background_color = (0.07, 0.08, 0.10, 1)
+        self.background_color = (0.05, 0.06, 0.08, 0.95)
         self.foreground_color = (1, 1, 1, 1)
         self.cursor_color = (1, 0.48, 0, 1)
         self.padding = [dp(10), dp(10)]
@@ -90,36 +96,72 @@ class StyledInput(TextInput):
 
 class NDTApp(App):
     def build(self):
-        Window.clearcolor = (0.06, 0.07, 0.08, 1)
+        Window.clearcolor = (0.05, 0.06, 0.07, 1)
         self.current_iso = "Ir-192"
 
-        root = BoxLayout(orientation='vertical')
+        # لایه اصلی FloatLayout برای پشتیبانی از پس‌زمینه تمام‌صفحه
+        main_root = FloatLayout()
 
-        # ----------------- نوار هدر (فقط نام شرکت + لوگو) -----------------
+        # ----------------- پس‌زمینه (bg.png) -----------------
+        bg_file = get_asset_path("bg.png")
+        if bg_file:
+            bg_image = Image(
+                source=bg_file,
+                allow_stretch=True,
+                keep_ratio=False,
+                size_hint=(1, 1),
+                pos_hint={'x': 0, 'y': 0}
+            )
+            main_root.add_widget(bg_image)
+
+            # لایه سایه‌روشن مشکی برای خوانایی متن‌ها روی عکس
+            overlay = BoxLayout(size_hint=(1, 1))
+            with overlay.canvas.before:
+                Color(0.04, 0.05, 0.07, 0.85)
+                self.rect_overlay = Rectangle(pos=overlay.pos, size=overlay.size)
+            overlay.bind(pos=lambda inst, val: setattr(self.rect_overlay, 'pos', val),
+                         size=lambda inst, val: setattr(self.rect_overlay, 'size', val))
+            main_root.add_widget(overlay)
+
+        # ----------------- بدنه اصلی برنامه -----------------
+        root = BoxLayout(orientation='vertical', size_hint=(1, 1))
+
+        # نوار هدر بالا (شامل لوگو و نام شرکت)
         header = ModernCard(
             orientation='horizontal',
-            bg=(0.09, 0.10, 0.12, 1),
-            border=(1.0, 0.48, 0.0, 0.4),
+            bg=(0.08, 0.09, 0.11, 0.98),
+            border=(1.0, 0.48, 0.0, 0.5),
             radius=0,
             border_width=1,
             size_hint_y=None,
-            height=dp(64),
-            padding=[dp(12), dp(6), dp(16), dp(6)],
-            spacing=dp(10)
+            height=dp(70),
+            padding=[dp(12), dp(8), dp(16), dp(8)],
+            spacing=dp(12)
         )
 
+        # لوگوی شرکت: بررسی فایل logo.png یا icon.png
         logo_path = get_asset_path("logo.png") or get_asset_path("icon.png")
         if logo_path:
             logo_img = Image(
                 source=logo_path,
                 size_hint=(None, None),
-                size=(dp(46), dp(46)),
+                size=(dp(52), dp(52)),
                 allow_stretch=True,
                 keep_ratio=True
             )
             header.add_widget(logo_img)
+        else:
+            # اگر فایلی پیدا نشد آیکون گرافیکی رزرو نمایش داده شود
+            fallback_lbl = Label(
+                text="☢",
+                font_size=sp(28),
+                size_hint=(None, 1),
+                width=dp(40),
+                color=(1, 0.55, 0.05, 1)
+            )
+            header.add_widget(fallback_lbl)
 
-        # عنوان: بدون هیچ متن اضافه‌ای، منحصراً نام شرکت
+        # عنوان شرکت
         h_title = Label(
             text=fa("شرکت رادیوگرافی صنعتی ایران"),
             font_name=FONT_PATH,
@@ -133,20 +175,20 @@ class NDTApp(App):
         header.add_widget(h_title)
         root.add_widget(header)
 
-        # فضای میانی برای تب‌ها
+        # فضای میانی برای سوئیچ تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
-        # نوار پایین
+        # نوار نویگیشن پایین
         nav = BoxLayout(
             orientation='horizontal',
             size_hint_y=None,
-            height=dp(60),
+            height=dp(62),
             padding=[dp(6), dp(6), dp(6), dp(6)],
             spacing=dp(6)
         )
         with nav.canvas.before:
-            Color(0.08, 0.09, 0.11, 1)
+            Color(0.07, 0.08, 0.10, 0.98)
             RoundedRectangle(pos=nav.pos, size=nav.size)
 
         self.tab_buttons = {}
@@ -172,8 +214,10 @@ class NDTApp(App):
             nav.add_widget(btn)
 
         root.add_widget(nav)
+        main_root.add_widget(root)
+
         self.switch_view("exposure")
-        return root
+        return main_root
 
     def switch_view(self, tab_id):
         for tid, btn in self.tab_buttons.items():
@@ -194,13 +238,12 @@ class NDTApp(App):
         elif tab_id == "specs":
             self.container.add_widget(self.render_specs_screen())
 
-    # ----------------- صفحه زمان پرتودهی (اصلاح‌شده) -----------------
+    # ----------------- ۱. زمان پرتودهی -----------------
     def render_exposure_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
         box.bind(minimum_height=box.setter('height'))
 
-        # انتخاب ایزوتوپ برای محاسبه زمان
         c_iso = ModernCard(orientation='vertical', size_hint_y=None, height=dp(88), padding=dp(8), spacing=dp(6))
         c_iso.add_widget(Label(text=fa("ایزوتوپ پرتودهی"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
         grid = GridLayout(cols=4, spacing=dp(6), size_hint_y=None, height=dp(38))
@@ -220,7 +263,6 @@ class NDTApp(App):
         c_iso.add_widget(grid)
         box.add_widget(c_iso)
 
-        # ردیف اکتیویته و ضخامت
         r1 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
         c_act = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
         c_act.add_widget(Label(text=fa("اکتیویته (Ci)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
@@ -237,7 +279,6 @@ class NDTApp(App):
         r1.add_widget(c_th)
         box.add_widget(r1)
 
-        # ردیف فاصله SFD و فاکتور فیلم
         r2 = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(100))
         c_sfd = ModernCard(orientation='vertical', padding=dp(8), spacing=dp(4))
         c_sfd.add_widget(Label(text=fa("فاصله SFD (cm)"), font_name=FONT_PATH, font_size=sp(12), color=(0.8, 0.85, 0.9, 1)))
@@ -254,10 +295,9 @@ class NDTApp(App):
         r2.add_widget(c_ff)
         box.add_widget(r2)
 
-        # کارت خروجی زمان پرتودهی
         self.c_exp_res = ModernCard(
             orientation='vertical',
-            bg=(0.20, 0.12, 0.04, 0.98),
+            bg=(0.20, 0.12, 0.04, 0.95),
             border=(1.0, 0.65, 0.1, 1),
             radius=18,
             size_hint_y=None,
@@ -266,7 +306,7 @@ class NDTApp(App):
             spacing=dp(4)
         )
         self.c_exp_res.add_widget(Label(text=fa("زمان پرتودهی محاسبه‌شده (Exposure Time)"), font_name=FONT_PATH, font_size=sp(13), color=(1, 0.85, 0.6, 1)))
-        self.lbl_exp_val = Label(text="---", font_name=FONT_PATH, font_size=sp(30), bold=True, color=(1, 0.72, 0.15, 1))
+        self.lbl_exp_val = Label(text="---", font_name=FONT_PATH, font_size=sp(28), bold=True, color=(1, 0.72, 0.15, 1))
         self.lbl_exp_sub = Label(text="", font_name=FONT_PATH, font_size=sp(11), color=(0.9, 0.8, 0.7, 1))
         self.c_exp_res.add_widget(self.lbl_exp_val)
         self.c_exp_res.add_widget(self.lbl_exp_sub)
@@ -306,8 +346,6 @@ class NDTApp(App):
             hvl_fe = iso["fe"]
             base_factor = iso.get("base_factor", 1.4)
 
-            # فرمول استاندارد اکسپوژر:
-            # زمان (دقیقه) = (Base × FF × 2^(Thickness/HVL) × (SFD_cm / 50)^2 ) / (A / 10)
             sfd_ratio = (sfd_cm / 50.0) ** 2
             half_value_layers = th / hvl_fe
             attenuation = 2.0 ** half_value_layers
@@ -327,7 +365,7 @@ class NDTApp(App):
             self.lbl_exp_val.text = fa("خطا در ورودی")
             self.lbl_exp_sub.text = fa("لطفاً فقط اعداد مجاز وارد کنید")
 
-    # ----------------- صفحه مرزبندی و ایمنی -----------------
+    # ----------------- ۲. مرزبندی و ایمنی -----------------
     def render_distance_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
@@ -377,7 +415,7 @@ class NDTApp(App):
 
         self.dist_res = ModernCard(
             orientation='vertical',
-            bg=(0.04, 0.17, 0.11, 0.98),
+            bg=(0.04, 0.17, 0.11, 0.95),
             border=(0.15, 0.95, 0.50, 1),
             radius=18,
             size_hint_y=None,
@@ -431,7 +469,7 @@ class NDTApp(App):
             self.lbl_dist_sub.text = fa("مقادیر معتبر وارد نمایید")
             self.lbl_operator_pos.text = fa("")
 
-    # ----------------- صفحه واپاشی -----------------
+    # ----------------- ۳. واپاشی روزانه -----------------
     def render_decay_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
@@ -456,7 +494,7 @@ class NDTApp(App):
 
         c_res = ModernCard(
             orientation='vertical',
-            bg=(0.05, 0.16, 0.24, 0.98),
+            bg=(0.05, 0.16, 0.24, 0.95),
             border=(0.2, 0.65, 0.95, 1),
             radius=18,
             size_hint_y=None,
@@ -505,7 +543,7 @@ class NDTApp(App):
             self.lbl_decay_sub.text = fa("ورودی نامعتبر")
             self.lbl_plaque.text = ""
 
-    # ----------------- صفحه تماس و شناسنامه -----------------
+    # ----------------- ۴. شناسنامه و اطلاعات شرکت -----------------
     def render_specs_screen(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         box = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(16), spacing=dp(12))
@@ -526,7 +564,7 @@ class NDTApp(App):
 
         contact = ModernCard(
             orientation='vertical',
-            bg=(0.10, 0.12, 0.16, 1),
+            bg=(0.10, 0.12, 0.16, 0.95),
             border=(1, 0.48, 0, 1),
             size_hint_y=None,
             height=dp(140),
