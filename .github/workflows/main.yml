@@ -34,12 +34,13 @@ jobs:
             libtinfo5 cmake libffi-dev libssl-dev \
             build-essential ccache \
             libltdl-dev libsqlite3-dev \
-            libjpeg-dev libpng-dev
+            libjpeg-dev libpng-dev curl wget
 
       - name: Download Persian font
         run: |
           if [ ! -f font.ttf ]; then
-            wget -O font.ttf https://github.com/google/fonts/raw/main/ofl/vazirmatn/Vazirmatn-Regular.ttf
+            curl -L -o font.ttf "https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Regular.ttf" || \
+            wget -O font.ttf "https://github.com/rastikerdar/vazirmatn/releases/latest/download/Vazirmatn-Regular.ttf" || true
           fi
 
       - name: Install Buildozer
