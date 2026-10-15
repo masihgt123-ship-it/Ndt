@@ -15,78 +15,69 @@ from kivy.uix.label import Label
 from kivy.uix.image import Image
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
+from kivy.graphics import Color, RoundedRectangle, Rectangle
 
-import ndt_calculator as calc
-
-# Window background base color
-Window.clearcolor = (0.06, 0.07, 0.08, 1.0)
+# پس‌زمینه دارک متالیک
+Window.clearcolor = (0.07, 0.08, 0.09, 1.0)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset_path(filename):
-    """Finds image or font assets with multiple fallbacks"""
-    candidates = [
-        os.path.join(BASE_DIR, filename),
-        os.path.join(BASE_DIR, 'assets', filename),
-        filename
-    ]
-    for p in candidates:
+    """بررسی و لود ایمن فایل‌ها"""
+    for p in [os.path.join(BASE_DIR, filename), os.path.join(BASE_DIR, 'assets', filename), filename]:
         if os.path.isfile(p):
             return p
-    return filename
+    return None
 
-FONT_NAME = get_asset_path('font.ttf')
+# تشخیص ایمن فونت فارسی
+FONT_FILE = get_asset_path('font.ttf') or get_asset_path('Vazirmatn-Regular.ttf')
 
 def fa(text):
-    """Prepares Persian string for RTL rendering in Kivy"""
+    """آماده‌سازی متن فارسی برای نمایش درست از راست به چپ"""
+    if not text:
+        return ""
     try:
-        if not text:
-            return ""
         reshaped = arabic_reshaper.reshape(str(text))
         return get_display(reshaped)
     except Exception:
         return str(text)
 
-class ModernCard(BoxLayout):
-    """Industrial dark glassmorphism card"""
-    def __init__(self, bg_color=(0.11, 0.13, 0.15, 0.92), border_color=(0.22, 0.25, 0.28, 1.0), radius=12, **kwargs):
-        super(ModernCard, self).__init__(**kwargs)
+# داده‌های مهندسی ایزوتوپ‌ها
+ISOTOPES = {
+    'Ir-192': {'gamma': 0.48, 'hvl_pb': 4.8, 'hvl_fe': 12.5, 'factor': 1.0},
+    'Se-75':  {'gamma': 0.20, 'hvl_pb': 2.0, 'hvl_fe': 8.0,  'factor': 0.85},
+    'Co-60':  {'gamma': 1.32, 'hvl_pb': 12.5,'hvl_fe': 21.0, 'factor': 2.1},
+    'Cs-137': {'gamma': 0.33, 'hvl_pb': 6.5, 'hvl_fe': 16.0, 'factor': 1.2}
+}
+
+class SafeCard(BoxLayout):
+    """کارت زیبا بدون باگ رسم گرافیکی"""
+    def __init__(self, bg_color=(0.12, 0.14, 0.16, 0.95), radius=10, **kwargs):
+        super(SafeCard, self).__init__(**kwargs)
         self.bg_color = bg_color
-        self.border_color = border_color
         self.radius = radius
         with self.canvas.before:
-            self.col_bg = Color(*self.bg_color)
+            Color(*self.bg_color)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
-            self.col_border = Color(*self.border_color)
-            self.border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, self.radius], width=1.1)
         self.bind(pos=self._update_shape, size=self._update_shape)
 
     def _update_shape(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
-        self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, self.radius]
 
-class StyledInput(TextInput):
-    """Dark-themed numeric input"""
+class SafeInput(TextInput):
+    """ورودی متن شیک و پایدار برای اندروید"""
     def __init__(self, **kwargs):
-        super(StyledInput, self).__init__(**kwargs)
+        super(SafeInput, self).__init__(**kwargs)
         self.background_normal = ''
         self.background_active = ''
-        self.background_color = (0.08, 0.09, 0.10, 1.0)
-        self.foreground_color = (1.0, 0.85, 0.30, 1.0)
-        self.cursor_color = (1.0, 0.48, 0.0, 1.0)
+        self.background_color = (0.05, 0.06, 0.07, 1.0)
+        self.foreground_color = (1.0, 0.80, 0.20, 1.0)
+        self.cursor_color = (1.0, 0.45, 0.0, 1.0)
         self.font_size = sp(15)
         self.multiline = False
         self.halign = 'center'
         self.padding = [dp(6), dp(8), dp(6), dp(8)]
-        with self.canvas.after:
-            Color(0.25, 0.28, 0.32, 1.0)
-            self.border_line = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 6], width=1.0)
-        self.bind(pos=self._update_input_border, size=self._update_input_border)
-
-    def _update_input_border(self, *args):
-        self.border_line.rounded_rectangle = [self.x, self.y, self.width, self.height, 6]
 
 class NDTMainApp(App):
     def build(self):
@@ -96,214 +87,186 @@ class NDTMainApp(App):
 
         root = FloatLayout()
 
-        # Background wallpaper with dark overlay
+        # تصویر پس‌زمینه
         bg_file = get_asset_path('bg.png')
-        if os.path.isfile(bg_file):
+        if bg_file:
             with root.canvas.before:
-                self.bg_img = Rectangle(source=bg_file, pos=root.pos, size=root.size)
+                self.bg_rect = Rectangle(source=bg_file, pos=root.pos, size=root.size)
                 Color(0.04, 0.05, 0.06, 0.88)
-                self.overlay = Rectangle(pos=root.pos, size=root.size)
-            root.bind(pos=self._update_bg, size=self._update_bg)
+                self.bg_overlay = Rectangle(pos=root.pos, size=root.size)
+            root.bind(pos=self._sync_bg, size=self._sync_bg)
 
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(12), spacing=dp(10))
+        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(10), spacing=dp(8))
         content.bind(minimum_height=content.setter('height'))
 
-        # Header Banner
-        banner_card = ModernCard(size_hint_y=None, height=dp(70), padding=dp(8), spacing=dp(10))
-        logo_path = get_asset_path('logo.png')
-        if os.path.isfile(logo_path):
-            logo_img = Image(source=logo_path, size_hint=(None, 1), width=dp(55))
-            banner_card.add_widget(logo_img)
-
-        title_box = BoxLayout(orientation='vertical')
-        app_title = Label(
-            text=fa('شرکت رادیوگرافی صنعتی ایران'),
-            font_name=FONT_NAME,
-            font_size=sp(15),
-            bold=True,
-            color=(1.0, 0.55, 0.0, 1.0)
-        )
-        sub_title = Label(
-            text=fa('محاسبات تخصصی دوز، فاصله ایمن و اکسپوژر'),
-            font_name=FONT_NAME,
-            font_size=sp(11),
-            color=(0.75, 0.78, 0.82, 1.0)
-        )
-        title_box.add_widget(app_title)
-        title_box.add_widget(sub_title)
-        banner_card.add_widget(title_box)
-        content.add_widget(banner_card)
-
-        # Source Selection Tabs (Gamma + X-Ray)
-        tab_card = ModernCard(orientation='vertical', size_hint_y=None, height=dp(85), padding=dp(8), spacing=dp(6))
-        tab_label = Label(text=fa('انتخاب منبع پرتو:'), font_name=FONT_NAME, font_size=sp(12), color=(0.8, 0.8, 0.8, 1.0), size_hint_y=None, height=dp(20))
-        tab_card.add_widget(tab_label)
-
-        btn_grid = GridLayout(cols=5, spacing=dp(6), size_hint_y=None, height=dp(44))
-        sources = ['Ir-192', 'Se-75', 'Co-60', 'Cs-137', 'X-Ray']
+        # بنر بالای صفحه
+        banner = SafeCard(size_hint_y=None, height=dp(68), padding=dp(6), spacing=dp(8))
+        logo_f = get_asset_path('logo.png')
+        if logo_f:
+            banner.add_widget(Image(source=logo_f, size_hint=(None, 1), width=dp(50)))
         
-        for s in sources:
+        t_box = BoxLayout(orientation='vertical')
+        kw = {'font_name': FONT_FILE} if FONT_FILE else {}
+        t_box.add_widget(Label(text=fa('شرکت رادیوگرافی صنعتی ایران'), font_size=sp(14), bold=True, color=(1.0, 0.50, 0.0, 1.0), **kw))
+        t_box.add_widget(Label(text=fa('محاسبات دوز، فاصله ایمن و پرتوگیری'), font_size=sp(10), color=(0.7, 0.75, 0.8, 1.0), **kw))
+        banner.add_widget(t_box)
+        content.add_widget(banner)
+
+        # تب‌های انتخاب منبع پرتو (گاما + پرتو ایکس)
+        tab_box = SafeCard(orientation='vertical', size_hint_y=None, height=dp(75), padding=dp(6), spacing=dp(4))
+        tab_box.add_widget(Label(text=fa('انتخاب منبع پرتو:'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), size_hint_y=None, height=dp(18), **kw))
+        
+        grid_tabs = GridLayout(cols=5, spacing=dp(4), size_hint_y=None, height=dp(40))
+        for s in ['Ir-192', 'Se-75', 'Co-60', 'Cs-137', 'X-Ray']:
             btn = Button(
                 text=s,
-                font_name=FONT_NAME,
-                font_size=sp(12),
                 bold=True,
+                font_size=sp(11),
                 background_normal='',
-                background_color=(1.0, 0.48, 0.0, 1.0) if s == self.current_source else (0.16, 0.18, 0.20, 1.0),
-                color=(1.0, 1.0, 1.0, 1.0)
+                background_color=(1.0, 0.45, 0.0, 1.0) if s == self.current_source else (0.18, 0.20, 0.22, 1.0),
+                color=(1, 1, 1, 1)
             )
-            btn.bind(on_release=lambda instance, src=s: self.select_source(src))
+            btn.bind(on_release=lambda inst, name=s: self.change_source(name))
             self.source_buttons[s] = btn
-            btn_grid.add_widget(btn)
+            grid_tabs.add_widget(btn)
+        tab_box.add_widget(grid_tabs)
+        content.add_widget(tab_box)
 
-        tab_card.add_widget(btn_grid)
-        content.add_widget(tab_card)
+        # کارت ورودی‌ها
+        inp_box = SafeCard(orientation='vertical', size_hint_y=None, height=dp(210), padding=dp(8), spacing=dp(6))
+        grid_inps = GridLayout(cols=2, spacing=dp(8), size_hint_y=1)
 
-        # Dynamic Inputs Card
-        self.input_card = ModernCard(orientation='vertical', size_hint_y=None, height=dp(240), padding=dp(10), spacing=dp(8))
-        self.inputs_grid = GridLayout(cols=2, spacing=dp(10), size_hint_y=1)
+        self.in1 = SafeInput(text='50')
+        self.lbl1 = Label(text=fa('اکتیویته چشمه (Ci):'), font_size=sp(11), color=(0.9, 0.9, 0.9, 1.0), **kw)
+        grid_inps.add_widget(self.in1)
+        grid_inps.add_widget(self.lbl1)
 
-        # Row 1: Primary Strength (Curie or kV)
-        self.lbl_param1 = Label(text=fa('اکتیویته چشمه (Ci):'), font_name=FONT_NAME, font_size=sp(12), color=(0.9, 0.9, 0.9, 1.0))
-        self.in_param1 = StyledInput(text='50')
-        self.inputs_grid.add_widget(self.in_param1)
-        self.inputs_grid.add_widget(self.lbl_param1)
+        self.in2 = SafeInput(text='0')
+        self.lbl2 = Label(text=fa('شیلد سرب کولیماتور (mm):'), font_size=sp(11), color=(0.9, 0.9, 0.9, 1.0), **kw)
+        grid_inps.add_widget(self.in2)
+        grid_inps.add_widget(self.lbl2)
 
-        # Row 2: Secondary Strength (X-Ray mA or Collimator Shield)
-        self.lbl_param2 = Label(text=fa('ضخامت شیلد سرب (mm):'), font_name=FONT_NAME, font_size=sp(12), color=(0.9, 0.9, 0.9, 1.0))
-        self.in_param2 = StyledInput(text='0')
-        self.inputs_grid.add_widget(self.in_param2)
-        self.inputs_grid.add_widget(self.lbl_param2)
+        self.in_thick = SafeInput(text='10')
+        grid_inps.add_widget(self.in_thick)
+        grid_inps.add_widget(Label(text=fa('ضخامت قطعه (mm):'), font_size=sp(11), color=(0.9, 0.9, 0.9, 1.0), **kw))
 
-        # Row 3: Pipe / Steel thickness (mm)
-        self.lbl_thick = Label(text=fa('ضخامت فولاد (mm):'), font_name=FONT_NAME, font_size=sp(12), color=(0.9, 0.9, 0.9, 1.0))
-        self.in_thick = StyledInput(text='12')
-        self.inputs_grid.add_widget(self.in_thick)
-        self.inputs_grid.add_widget(self.lbl_thick)
+        self.in_sfd = SafeInput(text='60')
+        grid_inps.add_widget(self.in_sfd)
+        grid_inps.add_widget(Label(text=fa('فاصله SFD (cm):'), font_size=sp(11), color=(0.9, 0.9, 0.9, 1.0), **kw))
 
-        # Row 4: SFD (cm)
-        self.lbl_sfd = Label(text=fa('فاصله SFD (cm):'), font_name=FONT_NAME, font_size=sp(12), color=(0.9, 0.9, 0.9, 1.0))
-        self.in_sfd = StyledInput(text='60')
-        self.inputs_grid.add_widget(self.in_sfd)
-        self.inputs_grid.add_widget(self.lbl_sfd)
+        inp_box.add_widget(grid_inps)
+        content.add_widget(inp_box)
 
-        self.input_card.add_widget(self.inputs_grid)
-        content.add_widget(self.input_card)
-
-        # Action Button: Calculate
-        self.calc_btn = Button(
+        # دکمه محاسبه
+        btn_calc = Button(
             text=fa('محاسبه فاصله ایمن و زمان اکسپوژر'),
-            font_name=FONT_NAME,
-            font_size=sp(15),
             bold=True,
+            font_size=sp(14),
             size_hint_y=None,
-            height=dp(48),
+            height=dp(46),
             background_normal='',
             background_color=(1.0, 0.45, 0.0, 1.0),
-            color=(1, 1, 1, 1)
+            color=(1, 1, 1, 1),
+            **kw
         )
-        self.calc_btn.bind(on_release=self.perform_calculation)
-        content.add_widget(self.calc_btn)
+        btn_calc.bind(on_release=self.calculate)
+        content.add_widget(btn_calc)
 
-        # Results Dashboard Card
-        self.res_card = ModernCard(
+        # کارت نمایش خروجی
+        self.res_card = SafeCard(
             orientation='vertical',
-            bg_color=(0.10, 0.12, 0.13, 0.95),
-            border_color=(1.0, 0.50, 0.0, 0.7),
+            bg_color=(0.10, 0.12, 0.14, 0.98),
             size_hint_y=None,
-            height=dp(170),
-            padding=dp(12),
-            spacing=dp(6)
+            height=dp(150),
+            padding=dp(8),
+            spacing=dp(5)
         )
-        
-        self.res_title = Label(text=fa('نتایج محاسبات ایمنی و پرتوگیری:'), font_name=FONT_NAME, font_size=sp(13), bold=True, color=(1.0, 0.75, 0.2, 1.0), size_hint_y=None, height=dp(24))
-        self.res_distance = Label(text=fa('فاصله طناب‌کشی ایمن: -- متر'), font_name=FONT_NAME, font_size=sp(15), bold=True, color=(0.2, 1.0, 0.5, 1.0))
-        self.res_operator = Label(text=fa('موقعیت مجاز اپراتور: -- متر'), font_name=FONT_NAME, font_size=sp(12), color=(0.85, 0.88, 0.9, 1.0))
-        self.res_time = Label(text=fa('زمان تخمینی اکسپوژر: -- ثانیه'), font_name=FONT_NAME, font_size=sp(14), bold=True, color=(1.0, 0.85, 0.2, 1.0))
+        self.res_dist = Label(text=fa('شعاع طناب‌کشی ایمن: -- متر'), font_size=sp(14), bold=True, color=(0.2, 1.0, 0.5, 1.0), **kw)
+        self.res_op = Label(text=fa('موقعیت مجاز اپراتور: -- متر'), font_size=sp(12), color=(0.8, 0.85, 0.9, 1.0), **kw)
+        self.res_time = Label(text=fa('زمان تخمینی اکسپوژر: -- ثانیه'), font_size=sp(13), bold=True, color=(1.0, 0.8, 0.2, 1.0), **kw)
 
-        self.res_card.add_widget(self.res_title)
-        self.res_card.add_widget(self.res_distance)
-        self.res_card.add_widget(self.res_operator)
+        self.res_card.add_widget(Label(text=fa('نتایج محاسبات مهندسی:'), font_size=sp(12), bold=True, color=(1.0, 0.6, 0.1, 1.0), **kw))
+        self.res_card.add_widget(self.res_dist)
+        self.res_card.add_widget(self.res_op)
         self.res_card.add_widget(self.res_time)
         content.add_widget(self.res_card)
 
-        # Emergency & Support Footer
-        footer = Label(
-            text=fa('تماس پشتیبانی: 09122012248 - 09121042253'),
-            font_name=FONT_NAME,
-            font_size=sp(11),
-            color=(0.55, 0.60, 0.65, 1.0),
-            size_hint_y=None,
-            height=dp(25)
-        )
-        content.add_widget(footer)
+        # فوتر
+        content.add_widget(Label(text=fa('تلفن تماس: 09122012248 - 09121042253'), font_size=sp(10), color=(0.5, 0.55, 0.6, 1.0), size_hint_y=None, height=dp(20), **kw))
 
         scroll.add_widget(content)
         root.add_widget(scroll)
-        
-        self.select_source('Ir-192')
         return root
 
-    def _update_bg(self, *args):
-        if hasattr(self, 'bg_img'):
-            self.bg_img.pos = Window.pos
-            self.bg_img.size = Window.size
-            self.overlay.pos = Window.pos
-            self.overlay.size = Window.size
+    def _sync_bg(self, *args):
+        if hasattr(self, 'bg_rect'):
+            self.bg_rect.pos = Window.pos
+            self.bg_rect.size = Window.size
+            self.bg_overlay.pos = Window.pos
+            self.bg_overlay.size = Window.size
 
-    def select_source(self, source_name):
-        self.current_source = source_name
-        for s, btn in self.source_buttons.items():
-            if s == source_name:
-                btn.background_color = (1.0, 0.48, 0.0, 1.0)
-            else:
-                btn.background_color = (0.16, 0.18, 0.20, 1.0)
-
-        # Adjust UI labels and defaults when switching between Gamma and X-Ray
-        if source_name == 'X-Ray':
-            self.lbl_param1.text = fa('ولتاژ تیوب (kV):')
-            self.in_param1.text = '200'
-            self.lbl_param2.text = fa('جریان تیوب (mA):')
-            self.in_param2.text = '4.0'
+    def change_source(self, name):
+        self.current_source = name
+        for s, b in self.source_buttons.items():
+            b.background_color = (1.0, 0.45, 0.0, 1.0) if s == name else (0.18, 0.20, 0.22, 1.0)
+        
+        if name == 'X-Ray':
+            self.lbl1.text = fa('ولتاژ تیوب (kV):')
+            self.in1.text = '200'
+            self.lbl2.text = fa('جریان تیوب (mA):')
+            self.in2.text = '4.0'
         else:
-            self.lbl_param1.text = fa('اکتیویته چشمه (Ci):')
-            self.in_param1.text = '45'
-            self.lbl_param2.text = fa('شیلد سرب کولیماتور (mm):')
-            self.in_param2.text = '0'
+            self.lbl1.text = fa('اکتیویته چشمه (Ci):')
+            self.in1.text = '45'
+            self.lbl2.text = fa('شیلد سرب کولیماتور (mm):')
+            self.in2.text = '0'
 
-    def perform_calculation(self, *args):
+    def calculate(self, *args):
         try:
-            val1 = float(self.in_param1.text.strip() or '0')
-            val2 = float(self.in_param2.text.strip() or '0')
+            v1 = float(self.in1.text.strip() or '0')
+            v2 = float(self.in2.text.strip() or '0')
             thick = float(self.in_thick.text.strip() or '10')
             sfd = float(self.in_sfd.text.strip() or '60')
 
+            dist_factor = math.pow(max(10.0, sfd) / 50.0, 2.0)
+
             if self.current_source == 'X-Ray':
-                kv = val1
-                ma = val2
-                safe_dist = calc.calculate_xray_safe_distance(kv=kv, ma=ma, lead_shield_mm=0.0, limit_dose=7.5)
-                exp_seconds = calc.calculate_exposure_time('X-Ray', activity_or_ma=ma, kv=kv, thickness_mm=thick, sfd_cm=sfd)
+                kv = max(50.0, v1)
+                ma = max(0.5, v2)
+                # دوز خروجی دستگاه X-Ray
+                output_rate = math.pow(kv / 100.0, 2.4) * 0.14 * ma * 60.0 * 10000.0
+                safe_d = math.sqrt(max(0.1, output_rate) / 7.5)
+                # زمان تابش
+                hvl_fe = 4.0 + (kv / 50.0)
+                thick_factor = math.pow(2.0, max(0.0, thick) / hvl_fe)
+                sec = (45.0 * thick_factor * dist_factor) / (ma * (kv / 150.0))
             else:
-                curie = val1
-                shield = val2
-                safe_dist = calc.calculate_gamma_safe_distance(self.current_source, curie=curie, lead_shield_mm=shield, limit_dose=7.5)
-                exp_seconds = calc.calculate_exposure_time(self.current_source, activity_or_ma=curie, thickness_mm=thick, sfd_cm=sfd)
+                curie = max(0.01, v1)
+                shield = max(0.0, v2)
+                iso = ISOTOPES[self.current_source]
+                trans = math.pow(2.0, -(shield / iso['hvl_pb'])) if iso['hvl_pb'] > 0 else 1.0
+                dose_rate_1m = iso['gamma'] * curie * 10000.0 * trans
+                safe_d = math.sqrt(max(0.1, dose_rate_1m) / 7.5)
+                # زمان تابش
+                thick_factor = math.pow(2.0, max(0.0, thick) / iso['hvl_fe'])
+                sec = (iso['factor'] * thick_factor * dist_factor * 120.0) / (curie / 10.0)
 
-            operator_dist = round(safe_dist * 1.25, 2)
-            
-            # Format time display (minutes and seconds)
-            mins = int(exp_seconds // 60)
-            secs = int(exp_seconds % 60)
-            time_str = f"{exp_seconds} ثانیه" if mins == 0 else f"{mins} دقیقه و {secs} ثانیه"
+            safe_d = round(safe_d, 2)
+            op_d = round(safe_d * 1.25, 2)
+            sec = round(max(1.0, sec), 1)
 
-            self.res_distance.text = fa(f'شعاع طناب‌کشی ایمن: {safe_dist} متر')
-            self.res_operator.text = fa(f'فاصله مجاز استقرار اپراتور: {operator_dist} متر')
-            self.res_time.text = fa(f'زمان تخمینی اکسپوژر: {time_str}')
+            m = int(sec // 60)
+            s = int(sec % 60)
+            t_txt = f"{sec} ثانیه" if m == 0 else f"{m} دقیقه و {s} ثانیه"
 
-        except Exception as err:
-            self.res_distance.text = fa('خطا در ارقام ورودی!')
-            self.res_operator.text = fa('لطفاً اعداد را به انگلیسی و صحیح وارد کنید.')
+            self.res_dist.text = fa(f'شعاع طناب‌کشی ایمن: {safe_d} متر')
+            self.res_op.text = fa(f'موقعیت مجاز اپراتور: {op_d} متر')
+            self.res_time.text = fa(f'زمان تخمینی اکسپوژر: {t_txt}')
+
+        except Exception:
+            self.res_dist.text = fa('خطا در ارقام ورودی!')
+            self.res_op.text = fa('لطفاً اعداد را به انگلیسی و صحیح بزنید')
             self.res_time.text = fa('')
 
 if __name__ == '__main__':
