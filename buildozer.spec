@@ -5,7 +5,7 @@ package.name = ndtsafedistance
 package.domain = com.industrialradiographyiran
 
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,ttf,kv,atlas
+source.include_exts = py,kv,png,jpg,jpeg,atlas,ttf
 
 version = 1.0
 
