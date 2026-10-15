@@ -23,7 +23,7 @@ from kivy.uix.screenmanager import (
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
-from calculations import (
+from ndt_calculator import (
     ISOTOPES,
     boundary_estimate,
     decay,
