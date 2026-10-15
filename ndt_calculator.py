@@ -1,116 +1,115 @@
 # -*- coding: utf-8 -*-
-"""Validated calculation core for the NDT gamma radiography estimator.
-
-All reference isotope values are illustrative; verify them against source and
-radiation-protection documentation before operational use.
 """
-from __future__ import annotations
+NDT Industrial Radiography Core Calculator
+Supports Gamma Isotopes (Ir-192, Se-75, Co-60, Cs-137) and Industrial X-Ray Units
+"""
 import math
-from datetime import date
-from typing import Dict, Optional
 
-# Gamma constants: R·m²/(h·Ci); HVLs in mm; half-life in days.
-ISOTOPES: Dict[str, Dict[str, object]] = {
-    "Ir-192": {"half_life": 73.83, "gamma": 0.48, "hvl_pb": 4.8, "hvl_steel": 12.5, "energy": "حدود 0.20 تا 0.61 MeV"},
-    "Se-75":  {"half_life": 119.8, "gamma": 0.20, "hvl_pb": 2.0, "hvl_steel": 8.0, "energy": "約 0.ள?"},
-    "Co-60":  {"half_life": 1925.0, "gamma": 1.32, "hvl_pb": 12.5, "hvl_steel": 21.0, "energy": "1.17 و 1.33 MeV"},
-    "Cs-137": {"half_life": 10986.0, "gamma": 0.33, "hvl_pb": 6.5, "hvl_steel": 16.0, "energy": "0.662 MeV"},
+ISOTOPE_DATA = {
+    'Ir-192': {
+        'name_fa': 'ایریدیوم ۱۹۲',
+        'gamma_const': 0.48,      # R·h^-1·Ci^-1 at 1 m
+        'half_life_days': 73.83,
+        'hvl_lead_mm': 4.8,       # Lead HVL in mm
+        'hvl_steel_mm': 12.5,     # Steel HVL in mm
+        'base_factor': 1.0
+    },
+    'Se-75': {
+        'name_fa': 'سلنیوم ۷۵',
+        'gamma_const': 0.20,
+        'half_life_days': 119.8,
+        'hvl_lead_mm': 2.0,
+        'hvl_steel_mm': 8.0,
+        'base_factor': 0.85
+    },
+    'Co-60': {
+        'name_fa': 'کبالت ۶۰',
+        'gamma_const': 1.32,
+        'half_life_days': 1925.2,
+        'hvl_lead_mm': 12.5,
+        'hvl_steel_mm': 21.0,
+        'base_factor': 2.1
+    },
+    'Cs-137': {
+        'name_fa': 'سزیم ۱۳۷',
+        'gamma_const': 0.33,
+        'half_life_days': 11000.0,
+        'hvl_lead_mm': 6.5,
+        'hvl_steel_mm': 16.0,
+        'base_factor': 1.2
+    }
 }
-# Replace textual energy entry with standard approximate line range.
-ISOTOPES["Se-75"]["energy"] = "حدود 0.07–0.40 MeV"
-DOSE_LIMITS = {"مرز عمومی (نمونه)": 2.5, "مرز کنترل (نمونه)": 7.5, "منطقه هشدار (نمونه)": 25.0}
 
+def get_xray_hvl_lead(kv):
+    """Half Value Layer (mm Pb) for X-Ray based on Tube Voltage"""
+    if kv <= 100:
+        return 0.25
+    elif kv <= 150:
+        return 0.35
+    elif kv <= 200:
+        return 0.55
+    elif kv <= 250:
+        return 0.90
+    else:
+        return 1.40
 
-def _positive(value: float, name: str, allow_zero: bool = False) -> float:
-    try:
-        x = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name}: مقدار عددی معتبر وارد کنید.") from exc
-    if not math.isfinite(x) or (x < 0 if allow_zero else x <= 0):
-        op = "صفر یا بیشتر" if allow_zero else "بزرگ‌تر از صفر"
-        raise ValueError(f"{name} باید {op} باشد.")
-    return x
-
-
-def _isotope(name: str) -> Dict[str, object]:
-    try:
-        return ISOTOPES[name]
-    except KeyError as exc:
-        raise ValueError("ایزوتوپ انتخاب‌شده در جدول موجود نیست.") from exc
-
-
-def attenuation(thickness_mm: float, hvl_mm: float) -> float:
-    """Transmission fraction through a material, using its supplied HVL."""
-    thickness = _positive(thickness_mm, "ضخامت", allow_zero=True)
-    hvl = _positive(hvl_mm, "HVL")
-    return 0.5 ** (thickness / hvl)
-
-
-def safe_distance(isotope: str, activity_ci: float, dose_usv_h: float,
-                  thickness_mm: float = 0.0, material: str = "lead") -> float:
-    """Boundary distance in metres using the requested inverse-square model.
-
-    d = sqrt(Gamma * Activity * 10000 * transmission / Dose_uSv_h)
-    Gamma uses R·m²/(h·Ci), and 10000 converts R/h to µSv/h approximately.
+def calculate_gamma_safe_distance(isotope_key, curie, lead_shield_mm=0.0, limit_dose=7.5):
     """
-    data = _isotope(isotope)
-    activity = _positive(activity_ci, "اکتیویته")
-    dose = _positive(dose_usv_h, "حد دز")
-    key = "hvl_pb" if material.lower() in ("lead", "pb", "سرب") else "hvl_steel"
-    trans = attenuation(thickness_mm, float(data[key]))
-    return math.sqrt(float(data["gamma"]) * activity * 10000.0 * trans / dose)
-
-
-def dose_rate_at(isotope: str, activity_ci: float, distance_m: float,
-                 thickness_mm: float = 0.0, material: str = "lead") -> float:
-    data = _isotope(isotope)
-    activity = _positive(activity_ci, "اکتیویته")
-    distance = _positive(distance_m, "فاصله")
-    key = "hvl_pb" if material.lower() in ("lead", "pb", "سرب") else "hvl_steel"
-    return float(data["gamma"]) * activity * 10000.0 * attenuation(thickness_mm, float(data[key])) / distance**2
-
-
-def activity_after(isotope: str, initial_ci: float, days: float) -> float:
-    data = _isotope(isotope)
-    initial = _positive(initial_ci, "اکتیویته اولیه", allow_zero=True)
-    elapsed = _positive(days, "روز سپری‌شده", allow_zero=True)
-    return initial * 0.5 ** (elapsed / float(data["half_life"]))
-
-
-def activity_daily(isotope: str, initial_ci: float, calibration_date: date,
-                   today: Optional[date] = None) -> dict:
-    if not isinstance(calibration_date, date):
-        raise ValueError("تاریخ مبنا نامعتبر است.")
-    current = today or date.today()
-    elapsed = (current - calibration_date).days
-    if elapsed < 0:
-        raise ValueError("تاریخ مبنا نمی‌تواند در آینده باشد.")
-    values = [(current.fromordinal(current.toordinal() + i),
-               activity_after(isotope, initial_ci, elapsed + i)) for i in range(7)]
-    return {"days_elapsed": elapsed, "activity_now": values[0][1], "daily": values}
-
-
-def exposure_time(isotope: str, steel_mm: float, film_factor: float,
-                  sfd_cm: float, activity_ci: float) -> dict:
-    """Chart-calibrated estimate in minutes.
-
-    t = Film_Factor * 2**(steel thickness / steel HVL) * (SFD/100)**2 / Activity
-    Film_Factor must come from the user's validated exposure chart/system and
-    is entered in Ci·min at 1 m and zero reference thickness. This is not a
-    universal exposure constant and this estimate must not replace approved charts.
+    Calculate safe distance in meters for Gamma Isotopes
+    Formula: D = sqrt((Gamma * A * 10000 * 2^(-t/HVL)) / Dose_limit)
     """
-    data = _isotope(isotope)
-    thickness = _positive(steel_mm, "ضخامت فولاد", allow_zero=True)
-    factor = _positive(film_factor, "ضریب فیلم/جدول")
-    sfd = _positive(sfd_cm, "فاصله منبع تا فیلم")
-    activity = _positive(activity_ci, "اکتیویته")
-    hvl = float(data["hvl_steel"])
-    relative_exposure = factor * 2.0 ** (thickness / hvl) * (sfd / 100.0) ** 2
-    minutes = relative_exposure / activity
-    return {"exposure_cimin": relative_exposure, "time_min": minutes, "time_sec": minutes * 60.0}
+    if isotope_key not in ISOTOPE_DATA:
+        return 0.0
+    
+    data = ISOTOPE_DATA[isotope_key]
+    gamma = data['gamma_const']
+    hvl = data['hvl_lead_mm']
+    
+    # Transmission factor through lead collimator/shield
+    transmission = math.pow(2.0, -(max(0.0, lead_shield_mm) / hvl)) if hvl > 0 else 1.0
+    dose_rate_1m = gamma * max(0.0, curie) * 10000.0 * transmission  # micro-Sv/h at 1 meter
+    
+    safe_dist = math.sqrt(max(0.0001, dose_rate_1m) / max(0.01, limit_dose))
+    return round(safe_dist, 2)
 
+def calculate_xray_safe_distance(kv, ma, lead_shield_mm=0.0, limit_dose=7.5):
+    """
+    Calculate safe distance in meters for Directional Industrial X-Ray Unit.
+    Unshielded output approx: Output(R/min at 1m) ~ (kV / 100)^2.5 * 0.15 * mA
+    Converted to micro-Sv/h: 1 R/h ~ 10,000 micro-Sv/h
+    """
+    safe_kv = max(50.0, kv)
+    safe_ma = max(0.5, ma)
+    
+    # Empirical output dose rate at 1 meter in micro-Sv/h (unshielded beam direction)
+    output_rate_1m = math.pow(safe_kv / 100.0, 2.4) * 0.14 * safe_ma * 60.0 * 10000.0
+    
+    hvl_lead = get_xray_hvl_lead(safe_kv)
+    transmission = math.pow(2.0, -(max(0.0, lead_shield_mm) / hvl_lead)) if hvl_lead > 0 else 1.0
+    
+    effective_dose_rate = output_rate_1m * transmission
+    safe_dist = math.sqrt(max(0.0001, effective_dose_rate) / max(0.01, limit_dose))
+    return round(safe_dist, 2)
 
-def isotope_specs() -> list:
-    """Rows suitable for a reference table."""
-    return [(name, values["half_life"], values["gamma"], values["hvl_pb"],
-             values["hvl_steel"], values["energy"]) for name, values in ISOTOPES.items()]
+def calculate_exposure_time(mode, activity_or_ma, kv=200, thickness_mm=10.0, sfd_cm=70.0, film_factor=1.0):
+    """
+    Calculates exposure time in seconds
+    """
+    sfd_cm = max(10.0, sfd_cm)
+    dist_factor = math.pow(sfd_cm / 50.0, 2.0)
+    
+    if mode == 'X-Ray':
+        ma = max(0.5, activity_or_ma)
+        # Steel absorption equivalent for X-Ray
+        hvl_steel = 4.0 + (kv / 50.0)
+        thick_factor = math.pow(2.0, max(0.0, thickness_mm) / hvl_steel)
+        # Base X-ray exposure constant
+        base_seconds = (45.0 * thick_factor * dist_factor * film_factor) / (ma * (kv / 150.0))
+        return round(max(1.0, base_seconds), 1)
+    else:
+        curie = max(0.1, activity_or_ma)
+        iso_data = ISOTOPE_DATA.get(mode, ISOTOPE_DATA['Ir-192'])
+        hvl_steel = iso_data['hvl_steel_mm']
+        thick_factor = math.pow(2.0, max(0.0, thickness_mm) / hvl_steel)
+        base_seconds = (iso_data['base_factor'] * film_factor * thick_factor * dist_factor * 120.0) / (curie / 10.0)
+        return round(max(1.0, base_seconds), 1)
