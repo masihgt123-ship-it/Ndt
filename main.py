@@ -748,7 +748,7 @@ class NDTMainApp(App):
             spacing=dp(12),
         )
 
-        logo = asset('logo.png')
+        logo = asset('Screenshot_20261015-203531.png')
 
         if logo:
             header.add_widget(
