@@ -17,8 +17,6 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.graphics import Color, RoundedRectangle, Rectangle
 
-Window.clearcolor = (0.07, 0.08, 0.10, 1.0)
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset(filename):
@@ -50,8 +48,9 @@ class SafeCard(BoxLayout):
         with self.canvas.before:
             Color(*bg_color)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[radius])
-        self.bind(pos=self._up, size=self._up)
-    def _up(self, *args):
+        self.bind(pos=self._update_rect, size=self._update_rect)
+
+    def _update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
 
@@ -70,6 +69,7 @@ class SafeInput(TextInput):
 
 class NDTMainApp(App):
     def build(self):
+        Window.clearcolor = (0.07, 0.08, 0.10, 1.0)
         self.title = 'رادیوگرافی صنعتی'
         self.current_source = 'Ir-192'
         self.source_buttons = {}
@@ -79,14 +79,10 @@ class NDTMainApp(App):
 
         bg_file = get_asset('bg.png')
         if bg_file:
-            try:
-                with root.canvas.before:
-                    self.bg_rect = Rectangle(source=bg_file, pos=root.pos, size=root.size)
-                    Color(0.04, 0.05, 0.06, 0.88)
-                    self.bg_overlay = Rectangle(pos=root.pos, size=root.size)
-                root.bind(pos=self._sync_bg, size=self._sync_bg)
-            except Exception:
-                pass
+            with root.canvas.before:
+                Color(1, 1, 1, 0.15)
+                self.bg_rect = Rectangle(source=bg_file, pos=root.pos, size=root.size)
+            root.bind(pos=self._sync_bg, size=self._sync_bg)
 
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         content = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(10), spacing=dp(8))
@@ -94,22 +90,22 @@ class NDTMainApp(App):
 
         font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
 
-        # ۱. بنر و هدر بالا
-        banner = SafeCard(size_hint_y=None, height=dp(68), padding=[dp(10), dp(6), dp(12), dp(6)], spacing=dp(10))
+        # ۱. بنر و هدر بالا (با مارجین کافی برای جلوگیری از بریده شدن حرف «ش»)
+        banner = SafeCard(size_hint_y=None, height=dp(70), padding=[dp(12), dp(6), dp(16), dp(6)], spacing=dp(10))
         logo_f = get_asset('logo.png')
         if logo_f:
             banner.add_widget(Image(source=logo_f, size_hint=(None, 1), width=dp(52)))
-        
-        t_box = BoxLayout(orientation='vertical', padding=[dp(4), 0, 0, 0])
+
+        t_box = BoxLayout(orientation='vertical', padding=[dp(6), 0, 0, 0])
         t_box.add_widget(Label(text=fa('شرکت رادیوگرافی صنعتی ایران'), font_size=sp(13), bold=True, color=(1.0, 0.50, 0.0, 1.0), halign='right', **font_kw))
         t_box.add_widget(Label(text=fa('محاسبات دوز، فاصله ایمن و پرتوگیری'), font_size=sp(10), color=(0.75, 0.80, 0.85, 1.0), halign='right', **font_kw))
         banner.add_widget(t_box)
         content.add_widget(banner)
 
-        # ۲. تب‌های انتخاب ایزوتوپ (بالا)
-        tab_card = SafeCard(orientation='vertical', size_hint_y=None, height=dp(72), padding=dp(6), spacing=dp(4))
+        # ۲. تب‌های انتخاب ایزوتوپ
+        tab_card = SafeCard(orientation='vertical', size_hint_y=None, height=dp(74), padding=dp(6), spacing=dp(4))
         tab_card.add_widget(Label(text=fa('انتخاب ایزوتوپ:'), font_size=sp(11), color=(0.85, 0.85, 0.85, 1.0), size_hint_y=None, height=dp(18), **font_kw))
-        
+
         grid_tabs = GridLayout(cols=4, spacing=dp(6), size_hint_y=None, height=dp(38))
         for s in ['Ir-192', 'Se-75', 'Co-60', 'Cs-137']:
             btn = Button(
@@ -127,7 +123,7 @@ class NDTMainApp(App):
         tab_card.add_widget(grid_tabs)
         content.add_widget(tab_card)
 
-        # ۳. کارت ورودی‌ها
+        # ۳. ورودی‌ها
         inp_box = SafeCard(orientation='vertical', size_hint_y=None, height=dp(215), padding=dp(8), spacing=dp(6))
         grid_inps = GridLayout(cols=2, spacing=dp(8), size_hint_y=1)
 
@@ -167,12 +163,12 @@ class NDTMainApp(App):
         btn_calc.bind(on_release=self.calculate)
         content.add_widget(btn_calc)
 
-        # ۴. کارت نمایش خروجی
+        # ۴. کارت نتایج
         self.res_card = SafeCard(
             orientation='vertical',
             bg_color=(0.10, 0.12, 0.15, 0.98),
             size_hint_y=None,
-            height=dp(140),
+            height=dp(130),
             padding=dp(8),
             spacing=dp(4)
         )
@@ -185,16 +181,16 @@ class NDTMainApp(App):
         self.res_card.add_widget(self.res_op)
         content.add_widget(self.res_card)
 
-        # فوتر تماس
+        # شماره تماس
         content.add_widget(Label(text=fa('تلفن تماس: 09122012248 - 09121042253'), font_size=sp(10), color=(0.55, 0.60, 0.65, 1.0), size_hint_y=None, height=dp(20), **font_kw))
 
         scroll.add_widget(content)
         root.add_widget(scroll)
 
-        # ۵. نوار ناوبری پایین صفحه (۵ دکمه شامل X-Ray)
+        # ۵. نوار ناوبری پایین صفحه (۵ دکمه)
         nav_bar = GridLayout(cols=5, size_hint_y=None, height=dp(52))
         bottom_tabs = ['مرزبندی و حفاظ', 'ایکس‌ری (X-Ray)', 'واپاشی روز', 'زمان پرتودهی', 'شناسنامه ایزوتوپ']
-        
+
         for i, t_name in enumerate(bottom_tabs):
             is_active = (i == 0)
             b = Button(
@@ -209,16 +205,14 @@ class NDTMainApp(App):
             b.bind(on_release=lambda inst, name=t_name: self.handle_bottom_tab(name))
             self.bottom_buttons[t_name] = b
             nav_bar.add_widget(b)
-            
+
         root.add_widget(nav_bar)
         return root
 
-    def _sync_bg(self, *args):
+    def _sync_bg(self, instance, value):
         if hasattr(self, 'bg_rect'):
-            self.bg_rect.pos = Window.pos
-            self.bg_rect.size = Window.size
-            self.bg_overlay.pos = Window.pos
-            self.bg_overlay.size = Window.size
+            self.bg_rect.pos = instance.pos
+            self.bg_rect.size = instance.size
 
     def change_source(self, name):
         self.current_source = name
@@ -228,7 +222,7 @@ class NDTMainApp(App):
     def handle_bottom_tab(self, tab_name):
         for name, btn in self.bottom_buttons.items():
             btn.background_color = (1.0, 0.45, 0.0, 1.0) if name == tab_name else (0.15, 0.17, 0.20, 1.0)
-        
+
         if tab_name == 'ایکس‌ری (X-Ray)':
             self.current_source = 'X-Ray'
             self.lbl1.text = fa('ولتاژ تیوب (kV):')
