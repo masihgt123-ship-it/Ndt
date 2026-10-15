@@ -79,19 +79,22 @@ class NDTMainApp(App):
 
         bg_file = get_asset('bg.png')
         if bg_file:
-            with root.canvas.before:
-                self.bg_rect = Rectangle(source=bg_file, pos=root.pos, size=root.size)
-                Color(0.04, 0.05, 0.06, 0.88)
-                self.bg_overlay = Rectangle(pos=root.pos, size=root.size)
-            root.bind(pos=self._sync_bg, size=self._sync_bg)
+            try:
+                with root.canvas.before:
+                    self.bg_rect = Rectangle(source=bg_file, pos=root.pos, size=root.size)
+                    Color(0.04, 0.05, 0.06, 0.88)
+                    self.bg_overlay = Rectangle(pos=root.pos, size=root.size)
+                root.bind(pos=self._sync_bg, size=self._sync_bg)
+            except Exception:
+                pass
 
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         content = BoxLayout(orientation='vertical', size_hint_y=None, padding=dp(10), spacing=dp(8))
         content.bind(minimum_height=content.setter('height'))
 
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH else {}
+        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
 
-        # ۱. بنر و هدر بالا (تنظیم پدینگ و فاصله برای جلوگیری از بریدن حرف «ش»)
+        # ۱. بنر و هدر بالا
         banner = SafeCard(size_hint_y=None, height=dp(68), padding=[dp(10), dp(6), dp(12), dp(6)], spacing=dp(10))
         logo_f = get_asset('logo.png')
         if logo_f:
@@ -115,7 +118,8 @@ class NDTMainApp(App):
                 font_size=sp(12),
                 background_normal='',
                 background_color=(1.0, 0.45, 0.0, 1.0) if s == self.current_source else (0.20, 0.22, 0.25, 1.0),
-                color=(1, 1, 1, 1)
+                color=(1, 1, 1, 1),
+                **font_kw
             )
             btn.bind(on_release=lambda inst, name=s: self.change_source(name))
             self.source_buttons[s] = btn
