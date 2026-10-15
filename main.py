@@ -1,472 +1,750 @@
 # -*- coding: utf-8 -*-
+import logging
 import os
-import math
-from datetime import datetime
 
 import arabic_reshaper
 from bidi.algorithm import get_display
 
 from kivy.app import App
 from kivy.core.window import Window
+from kivy.graphics import Color, RoundedRectangle
 from kivy.metrics import dp, sp
+from kivy.properties import StringProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.label import Label
-from kivy.uix.image import Image
-from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
-from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
-from kivy.graphics import Color, RoundedRectangle, Rectangle
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import Image
+from kivy.uix.label import Label
+from kivy.uix.screenmanager import (
+    FadeTransition,
+    Screen,
+    ScreenManager,
+)
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.textinput import TextInput
+
+from calculations import (
+    ISOTOPES,
+    boundary_estimate,
+    decay,
+    exposure_seconds,
+    number,
+    xray_distance,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+ORANGE = (1, .45, 0, 1)
+INACTIVE = (.16, .18, .22, 1)
+
+
 def get_asset(filename):
-    for p in [os.path.join(BASE_DIR, filename), os.path.join(BASE_DIR, 'assets', filename), filename]:
-        if os.path.isfile(p):
-            return p
+    for folder in (BASE_DIR, os.path.join(BASE_DIR, 'assets')):
+        path = os.path.join(folder, filename)
+
+        if os.path.isfile(path):
+            return path
+
     return None
 
-FONT_PATH = get_asset('Vazirmatn-Regular.ttf') or get_asset('font.ttf')
+
+FONT_PATH = (
+    get_asset('Vazirmatn-Regular.ttf')
+    or get_asset('font.ttf')
+)
+
+FONT_KW = {'font_name': FONT_PATH} if FONT_PATH else {}
+
 
 def fa(text):
     if not text:
-        return ""
-    try:
-        return get_display(arabic_reshaper.reshape(str(text)))
-    except Exception:
-        return str(text)
+        return ''
 
-ISOTOPES = {
-    'Ir-192': {'gamma': 0.48, 'hvl_pb': 4.8, 'hvl_fe': 12.5, 'half_life': 73.83, 'name': 'ایریدیوم ۱۹۲', 'energy': '0.38 MeV'},
-    'Se-75':  {'gamma': 0.20, 'hvl_pb': 2.0, 'hvl_fe': 8.0,  'half_life': 119.78, 'name': 'سلنیوم ۷۵', 'energy': '0.32 MeV'},
-    'Co-60':  {'gamma': 1.32, 'hvl_pb': 12.5,'hvl_fe': 21.0, 'half_life': 1925.0, 'name': 'کبالت ۶۰', 'energy': '1.25 MeV'},
-    'Cs-137': {'gamma': 0.33, 'hvl_pb': 6.5, 'hvl_fe': 16.0, 'half_life': 11000.0, 'name': 'سزیوم ۱۳۷', 'energy': '0.66 MeV'}
-}
+    return get_display(arabic_reshaper.reshape(str(text)))
+
 
 class SafeCard(BoxLayout):
-    def __init__(self, bg_color=(0.10, 0.12, 0.15, 0.95), border_color=None, radius=10, **kwargs):
-        super(SafeCard, self).__init__(**kwargs)
-        self.bg_color = bg_color
-        self.border_color = border_color
-        self.radius = radius
+    def __init__(
+        self,
+        bg_color=(.10, .12, .15, 1),
+        radius=10,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
         with self.canvas.before:
-            if self.border_color:
-                Color(*self.border_color)
-                self.border_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[radius+1])
-            Color(*self.bg_color)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[radius])
-        self.bind(pos=self._update_rect, size=self._update_rect)
+            Color(*bg_color)
+            self.rect = RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[dp(radius)],
+            )
+
+        self.bind(
+            pos=self._update_rect,
+            size=self._update_rect,
+        )
 
     def _update_rect(self, *args):
-        if hasattr(self, 'border_rect'):
-            self.border_rect.pos = (self.pos[0]-1, self.pos[1]-1)
-            self.border_rect.size = (self.size[0]+2, self.size[1]+2)
         self.rect.pos = self.pos
         self.rect.size = self.size
 
+
+class WrappedLabel(Label):
+    """Wrap long labels instead of clipping them."""
+
+    def __init__(self, text='', **kwargs):
+        kwargs.setdefault('font_size', sp(13))
+        kwargs.setdefault('color', (.85, .88, .91, 1))
+        kwargs.setdefault('halign', 'right')
+
+        super().__init__(
+            text=fa(text),
+            size_hint_y=None,
+            **FONT_KW,
+            **kwargs,
+        )
+
+        self.bind(
+            width=self._wrap,
+            texture_size=self._fit,
+        )
+
+        self._wrap()
+        self._fit()
+
+    def _wrap(self, *args):
+        self.text_size = (
+            max(dp(1), self.width - dp(12)),
+            None,
+        )
+
+    def _fit(self, *args):
+        self.height = max(
+            dp(26),
+            self.texture_size[1] + dp(12),
+        )
+
+
 class SafeInput(TextInput):
     def __init__(self, **kwargs):
-        super(SafeInput, self).__init__(**kwargs)
-        self.background_normal = ''
-        self.background_active = ''
-        self.background_color = (0.05, 0.06, 0.08, 1.0)
-        self.foreground_color = (1.0, 1.0, 1.0, 1.0)
-        self.cursor_color = (1.0, 0.48, 0.0, 1.0)
-        self.font_size = sp(16)
-        self.bold = True
-        self.multiline = False
-        self.halign = 'center'
-        self.padding = [dp(6), dp(10), dp(6), dp(10)]
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
-        for k, v in font_kw.items():
-            setattr(self, k, v)
-
-
-# ----------------- صفحه ۱: مرزبندی و حفاظ (گاما) -----------------
-class SafetyScreen(Screen):
-    def __init__(self, app, **kwargs):
-        super(SafetyScreen, self).__init__(**kwargs)
-        self.app = app
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
-
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=[dp(12), dp(8)], spacing=dp(10))
-        content.bind(minimum_height=content.setter('height'))
-
-        # انتخاب ایزوتوپ
-        iso_card = SafeCard(orientation='vertical', size_hint_y=None, height=dp(80), padding=dp(8), spacing=dp(6))
-        iso_card.add_widget(Label(text=fa('انتخاب ایزوتوپ'), font_size=sp(12), color=(0.8, 0.85, 0.9, 1.0), size_hint_y=None, height=dp(20), **font_kw))
-        
-        grid_iso = GridLayout(cols=4, spacing=dp(6), size_hint_y=None, height=dp(38))
-        self.iso_btns = {}
-        for s in ['Ir-192', 'Se-75', 'Co-60', 'Cs-137']:
-            b = Button(
-                text=s, bold=True, font_size=sp(13),
-                background_normal='',
-                background_color=(1.0, 0.45, 0.0, 1.0) if s == self.app.current_source else (0.16, 0.18, 0.22, 1.0),
-                color=(1, 1, 1, 1), **font_kw
-            )
-            b.bind(on_release=lambda inst, name=s: self.set_iso(name))
-            self.iso_btns[s] = b
-            grid_iso.add_widget(b)
-        iso_card.add_widget(grid_iso)
-        content.add_widget(iso_card)
-
-        # ورودی‌های اکتیویته و دوز مجاز (دو ستونه)
-        row1 = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, height=dp(95))
-        
-        c_act = SafeCard(orientation='vertical', padding=dp(6), spacing=dp(4))
-        c_act.add_widget(Label(text=fa('اکتیویته (Ci)'), font_size=sp(11), color=(0.75, 0.8, 0.85, 1.0), size_hint_y=None, height=dp(18), **font_kw))
-        self.in_act = SafeInput(text='40')
-        self.in_act.bind(text=self.calc)
-        c_act.add_widget(self.in_act)
-        row1.add_widget(c_act)
-
-        c_dose = SafeCard(orientation='vertical', padding=dp(6), spacing=dp(4))
-        c_dose.add_widget(Label(text=fa('حد دوز (µSv/h)'), font_size=sp(11), color=(0.75, 0.8, 0.85, 1.0), size_hint_y=None, height=dp(18), **font_kw))
-        self.in_dose = SafeInput(text='2.5')
-        self.in_dose.bind(text=self.calc)
-        c_dose.add_widget(self.in_dose)
-        row1.add_widget(c_dose)
-        content.add_widget(row1)
-
-        # ضخامت کولیماتور سرب
-        c_sh = SafeCard(orientation='vertical', size_hint_y=None, height=dp(85), padding=dp(6), spacing=dp(4))
-        c_sh.add_widget(Label(text=fa('ضخامت حفاظ سربی یا کولیماتور (mm)'), font_size=sp(11), color=(0.75, 0.8, 0.85, 1.0), size_hint_y=None, height=dp(18), **font_kw))
-        self.in_sh = SafeInput(text='0')
-        self.in_sh.bind(text=self.calc)
-        c_sh.add_widget(self.in_sh)
-        content.add_widget(c_sh)
-
-        # کارت سبز نئونی نتیجه (دقیقاً مثل عکس ارسالی)
-        self.res_card = SafeCard(
-            orientation='vertical',
-            bg_color=(0.04, 0.12, 0.08, 0.95),
-            border_color=(0.10, 0.85, 0.40, 1.0),
-            radius=12,
+        super().__init__(
+            multiline=False,
             size_hint_y=None,
-            height=dp(165),
-            padding=dp(10),
-            spacing=dp(4)
+            height=dp(48),
+            background_normal='',
+            background_active='',
+            background_color=(.05, .06, .08, 1),
+            foreground_color=(1, 1, 1, 1),
+            cursor_color=ORANGE,
+            font_size=sp(16),
+            halign='center',
+            padding=[dp(6), dp(10)],
+            write_tab=False,
+            **FONT_KW,
+            **kwargs,
         )
-        self.res_card.add_widget(Label(text=fa('شعاع فاصله طناب‌کشی ایمن'), font_size=sp(12), color=(0.8, 0.9, 0.85, 1.0), size_hint_y=None, height=dp(20), **font_kw))
-        self.lbl_dist = Label(text=fa('309.8 متر'), font_size=sp(28), bold=True, color=(0.15, 1.0, 0.45, 1.0), size_hint_y=None, height=dp(45), **font_kw)
-        self.lbl_info = Label(text=fa('ایزوتوپ: Ir-192 | تضعیف حفاظ: 1.00'), font_size=sp(11), color=(0.7, 0.8, 0.75, 1.0), size_hint_y=None, height=dp(20), **font_kw)
-        self.lbl_op = Label(text=fa('استقرار مجاز اپراتور: حداقل 387.3 متری چشمه'), font_size=sp(12), bold=True, color=(1.0, 0.82, 0.25, 1.0), size_hint_y=None, height=dp(25), **font_kw)
-
-        self.res_card.add_widget(self.lbl_dist)
-        self.res_card.add_widget(self.lbl_info)
-        self.res_card.add_widget(self.lbl_op)
-        content.add_widget(self.res_card)
-
-        scroll.add_widget(content)
-        self.add_widget(scroll)
-        self.calc()
-
-    def set_iso(self, name):
-        self.app.current_source = name
-        for s, b in self.iso_btns.items():
-            b.background_color = (1.0, 0.45, 0.0, 1.0) if s == name else (0.16, 0.18, 0.22, 1.0)
-        self.calc()
-
-    def calc(self, *args):
-        try:
-            curie = float(self.in_act.text.strip() or '0')
-            dose_lim = float(self.in_dose.text.strip() or '2.5')
-            shield = float(self.in_sh.text.strip() or '0')
-            dose_lim = max(0.1, dose_lim)
-
-            iso = ISOTOPES.get(self.app.current_source, ISOTOPES['Ir-192'])
-            trans = math.pow(2.0, -(shield / iso['hvl_pb'])) if iso['hvl_pb'] > 0 else 1.0
-            dose_1m = iso['gamma'] * curie * 10000.0 * trans
-            dist = math.sqrt(max(0.01, dose_1m) / dose_lim)
-            op = dist * 1.25
-
-            self.lbl_dist.text = fa(f"{dist:.1f} متر")
-            self.lbl_info.text = fa(f"ایزوتوپ: {self.app.current_source} | تضعیف حفاظ: {trans:.2f}")
-            self.lbl_op.text = fa(f"استقرار مجاز اپراتور: حداقل {op:.1f} متری چشمه")
-        except Exception:
-            pass
 
 
-# ----------------- صفحه ۲: ایکس‌ری (X-Ray) -----------------
-class XRayScreen(Screen):
-    def __init__(self, app, **kwargs):
-        super(XRayScreen, self).__init__(**kwargs)
+class CalculationScreen(Screen):
+    def __init__(self, app, title, **kwargs):
+        super().__init__(**kwargs)
+
         self.app = app
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
+        self.inputs = {}
+        self.titles = {}
+        self._ready = False
 
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=[dp(12), dp(8)], spacing=dp(10))
-        content.bind(minimum_height=content.setter('height'))
+        scroll = ScrollView(do_scroll_x=False)
 
-        header = SafeCard(size_hint_y=None, height=dp(40), padding=dp(6))
-        header.add_widget(Label(text=fa('محاسبات دستگاه مولد پرتو ایکس (X-Ray)'), bold=True, font_size=sp(13), color=(1.0, 0.5, 0.0, 1.0), **font_kw))
-        content.add_widget(header)
+        self.content = BoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            padding=dp(12),
+            spacing=dp(10),
+        )
 
-        row = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, height=dp(95))
-        c_kv = SafeCard(orientation='vertical', padding=dp(6))
-        c_kv.add_widget(Label(text=fa('ولتاژ تیوب (kV)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_kv = SafeInput(text='200')
-        self.in_kv.bind(text=self.calc)
-        c_kv.add_widget(self.in_kv)
-        row.add_widget(c_kv)
+        self.content.bind(
+            minimum_height=self.content.setter('height')
+        )
 
-        c_ma = SafeCard(orientation='vertical', padding=dp(6))
-        c_ma.add_widget(Label(text=fa('جریان تیوب (mA)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_ma = SafeInput(text='4.0')
-        self.in_ma.bind(text=self.calc)
-        c_ma.add_widget(self.in_ma)
-        row.add_widget(c_ma)
-        content.add_widget(row)
+        self.content.add_widget(
+            WrappedLabel(
+                title,
+                color=ORANGE,
+                bold=True,
+            )
+        )
 
-        c_th = SafeCard(orientation='vertical', size_hint_y=None, height=dp(85), padding=dp(6))
-        c_th.add_widget(Label(text=fa('ضخامت قطعه فولادی (mm)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_th = SafeInput(text='12')
-        self.in_th.bind(text=self.calc)
-        c_th.add_widget(self.in_th)
-        content.add_widget(c_th)
+        self.source_label = WrappedLabel('')
+        self.content.add_widget(self.source_label)
 
-        self.res = SafeCard(orientation='vertical', bg_color=(0.04, 0.12, 0.08, 0.95), border_color=(0.10, 0.85, 0.40, 1.0), radius=12, size_hint_y=None, height=dp(140), padding=dp(10))
-        self.res.add_widget(Label(text=fa('فاصله ایمن بدون حفاظ'), font_size=sp(12), color=(0.8, 0.9, 0.85, 1.0), **font_kw))
-        self.lbl_xd = Label(text=fa('-- متر'), font_size=sp(26), bold=True, color=(0.15, 1.0, 0.45, 1.0), **font_kw)
-        self.lbl_xi = Label(text=fa('خروجی تابش و زمان تخمینی'), font_size=sp(11), color=(0.7, 0.8, 0.75, 1.0), **font_kw)
-        self.res.add_widget(self.lbl_xd)
-        self.res.add_widget(self.lbl_xi)
-        content.add_widget(self.res)
-
-        scroll.add_widget(content)
+        scroll.add_widget(self.content)
         self.add_widget(scroll)
+
+        app.bind(current_source=self._source_changed)
+
+    def field(self, key, title, default=''):
+        card = SafeCard(
+            orientation='vertical',
+            padding=dp(8),
+            size_hint_y=None,
+            spacing=dp(4),
+        )
+
+        card.bind(minimum_height=card.setter('height'))
+        card.add_widget(WrappedLabel(title))
+
+        widget = SafeInput(text=default)
+
+        self.inputs[key] = widget
+        self.titles[key] = title
+
+        card.add_widget(widget)
+        self.content.add_widget(card)
+
+        widget.bind(text=self.calc)
+
+    def note(self, text):
+        self.content.add_widget(
+            WrappedLabel(
+                text,
+                font_size=sp(12),
+                color=(1, .78, .35, 1),
+            )
+        )
+
+    def finish(self):
+        card = SafeCard(
+            orientation='vertical',
+            size_hint_y=None,
+            padding=dp(10),
+            bg_color=(.06, .12, .10, 1),
+        )
+
+        card.bind(minimum_height=card.setter('height'))
+
+        self.result = WrappedLabel(
+            '—',
+            font_size=sp(20),
+        )
+        self.details = WrappedLabel(
+            '',
+            font_size=sp(12),
+        )
+
+        card.add_widget(self.result)
+        card.add_widget(self.details)
+        self.content.add_widget(card)
+
+        self._ready = True
+        self.calc()
+
+    def value(self, key, positive=False):
+        return number(
+            self.inputs[key].text,
+            self.titles[key],
+            positive,
+        )
+
+    def _source_changed(self, *args):
+        self.calc()
+
+    def on_pre_enter(self, *args):
         self.calc()
 
     def calc(self, *args):
+        if not self._ready:
+            return
+
+        self.source_label.text = fa(
+            f'ایزوتوپ انتخاب‌شده: {self.app.current_source}'
+        )
+
+        # Clear stale results before evaluating the new input.
+        self.result.text = fa('—')
+        self.details.text = ''
+
         try:
-            kv = max(50.0, float(self.in_kv.text.strip() or '200'))
-            ma = max(0.5, float(self.in_ma.text.strip() or '4'))
-            th = max(0.0, float(self.in_th.text.strip() or '12'))
-            out_rate = math.pow(kv / 100.0, 2.4) * 0.14 * ma * 60.0 * 10000.0
-            dist = math.sqrt(out_rate / 7.5)
-            hvl = 4.0 + (kv / 50.0)
-            t_sec = (45.0 * math.pow(2.0, th / hvl)) / (ma * (kv / 150.0))
-            self.lbl_xd.text = fa(f"{dist:.1f} متر")
-            self.lbl_xi.text = fa(f"تخمین زمان اکسپوژر فولاد: {t_sec:.1f} ثانیه")
+            result, details = self.compute()
+
+            self.result.color = (.65, .95, .80, 1)
+            self.result.text = fa(result)
+            self.details.text = fa(details)
+
+        except ValueError as exc:
+            self.result.color = (1, .65, .4, 1)
+            self.result.text = fa('ورودی یا نتیجه نامعتبر')
+            self.details.text = fa(str(exc))
+
+        except OverflowError:
+            self.result.text = fa(
+                'عدد خارج از محدوده محاسبه است'
+            )
+
         except Exception:
-            pass
+            logging.exception(
+                'Calculation failed on %s',
+                self.name,
+            )
+            self.result.text = fa(
+                'خطای داخلی؛ گزارش برنامه را بررسی کنید'
+            )
+
+    def compute(self):
+        raise NotImplementedError
 
 
-# ----------------- صفحه ۳: واپاشی روز -----------------
-class DecayScreen(Screen):
+class SafetyScreen(CalculationScreen):
     def __init__(self, app, **kwargs):
-        super(DecayScreen, self).__init__(**kwargs)
-        self.app = app
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
+        super().__init__(
+            app,
+            'برآورد فاصله با مدل ساده گاما',
+            **kwargs,
+        )
 
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=[dp(12), dp(8)], spacing=dp(10))
-        content.bind(minimum_height=content.setter('height'))
+        self.field(
+            'activity',
+            'اکتیویته (Ci)',
+            '40',
+        )
+        self.field(
+            'dose',
+            'نرخ دوز هدف (µSv/h) ـ مطابق طرح مصوب',
+            '2.5',
+        )
+        self.field(
+            'shield',
+            'ضخامت سرب در مسیر پرتو (mm)',
+            '0',
+        )
 
-        header = SafeCard(size_hint_y=None, height=dp(40), padding=dp(6))
-        header.add_widget(Label(text=fa('محاسبه واپاشی چشمه بر اساس روز'), bold=True, font_size=sp(13), color=(1.0, 0.5, 0.0, 1.0), **font_kw))
-        content.add_widget(header)
+        self.note(
+            'صرفاً برآورد مدل نقطه‌ای؛ نه تعیین مرز ایمن. '
+            'داده‌های ایزوتوپ از کد اولیه هستند و مستقلاً '
+            'تأیید نشده‌اند. تبدیل واحد دوز تقریبی است. '
+            'پراکندگی، buildup، نشتی و هندسه واقعی لحاظ نشده‌اند.'
+        )
 
-        row = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, height=dp(95))
-        c_a0 = SafeCard(orientation='vertical', padding=dp(6))
-        c_a0.add_widget(Label(text=fa('اکتیویته اولیه A0 (Ci)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_a0 = SafeInput(text='80')
-        self.in_a0.bind(text=self.calc)
-        c_a0.add_widget(self.in_a0)
-        row.add_widget(c_a0)
+        self.note(
+            'ضخامت کولیماتور برای دهانه خروجی پرتو قابل استفاده نیست. '
+            'فاصله مجاز اپراتور از این مدل تعیین نمی‌شود. '
+            'مرزبندی نیازمند طرح مصوب، مسئول حفاظت پرتویی '
+            'و اندازه‌گیری با دستگاه مناسب و کالیبره است.'
+        )
 
-        c_d = SafeCard(orientation='vertical', padding=dp(6))
-        c_d.add_widget(Label(text=fa('روزهای سپری شده (Days)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_days = SafeInput(text='30')
-        self.in_days.bind(text=self.calc)
-        c_d.add_widget(self.in_days)
-        row.add_widget(c_d)
-        content.add_widget(row)
+        self.finish()
 
-        self.res = SafeCard(orientation='vertical', bg_color=(0.04, 0.12, 0.08, 0.95), border_color=(0.10, 0.85, 0.40, 1.0), radius=12, size_hint_y=None, height=dp(130), padding=dp(10))
-        self.res.add_widget(Label(text=fa('اکتیویته امروز چشمه (زنده)'), font_size=sp(12), color=(0.8, 0.9, 0.85, 1.0), **font_kw))
-        self.lbl_at = Label(text=fa('-- Ci'), font_size=sp(28), bold=True, color=(0.15, 1.0, 0.45, 1.0), **font_kw)
-        self.lbl_dec_info = Label(text=fa('درصد افت اکتیویته: --'), font_size=sp(11), color=(0.7, 0.8, 0.75, 1.0), **font_kw)
-        self.res.add_widget(self.lbl_at)
-        self.res.add_widget(self.lbl_dec_info)
-        content.add_widget(self.res)
+    def compute(self):
+        distance, transmission = boundary_estimate(
+            self.app.current_source,
+            self.value('activity'),
+            self.value('dose', True),
+            self.value('shield'),
+        )
 
-        scroll.add_widget(content)
-        self.add_widget(scroll)
-        self.calc()
-
-    def calc(self, *args):
-        try:
-            a0 = float(self.in_a0.text.strip() or '0')
-            days = float(self.in_days.text.strip() or '0')
-            iso = ISOTOPES.get(self.app.current_source, ISOTOPES['Ir-192'])
-            hl = iso['half_life']
-            at = a0 * math.exp(-0.69315 * days / hl)
-            pct = ((a0 - at) / a0 * 100.0) if a0 > 0 else 0
-            self.lbl_at.text = fa(f"{at:.2f} Ci")
-            self.lbl_dec_info.text = fa(f"چشمه {self.app.current_source} | افت: {pct:.1f}%")
-        except Exception:
-            pass
+        return (
+            f'فاصله مدل: {distance:.3g} متر',
+            f'ضریب عبور مدل سرب: {transmission:.4g} | '
+            'این نتیجه تأیید ایمنی نیست.',
+        )
 
 
-# ----------------- صفحه ۴: زمان پرتودهی -----------------
-class ExposureScreen(Screen):
+class XRayScreen(CalculationScreen):
     def __init__(self, app, **kwargs):
-        super(ExposureScreen, self).__init__(**kwargs)
-        self.app = app
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
+        super().__init__(
+            app,
+            'ایکس‌ری: برآورد از نرخ دوز اندازه‌گیری‌شده',
+            **kwargs,
+        )
 
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=[dp(12), dp(8)], spacing=dp(10))
-        content.bind(minimum_height=content.setter('height'))
+        self.field(
+            'rate',
+            'نرخ دوز مرجع اندازه‌گیری‌شده (µSv/h)',
+        )
+        self.field(
+            'distance',
+            'فاصله اندازه‌گیری از کانون (m)',
+        )
+        self.field(
+            'target',
+            'نرخ دوز هدف (µSv/h) ـ مطابق طرح مصوب',
+        )
 
-        header = SafeCard(size_hint_y=None, height=dp(40), padding=dp(6))
-        header.add_widget(Label(text=fa('محاسبه زمان اکسپوژر فیلم'), bold=True, font_size=sp(13), color=(1.0, 0.5, 0.0, 1.0), **font_kw))
-        content.add_widget(header)
+        self.note(
+            'فرمول تجربی بدون مرجعِ کد اولیه حذف شد. '
+            'نرخ مرجع باید با ابزار مناسب و کالیبره، '
+            'برای همان kV، جریان، فیلتراسیون، جهت و شرایط کار '
+            'اندازه‌گیری شده باشد. '
+            'برای پرتو پالسی از ابزار مناسب آن استفاده شود.'
+        )
 
-        row = GridLayout(cols=2, spacing=dp(8), size_hint_y=None, height=dp(95))
-        c_th = SafeCard(orientation='vertical', padding=dp(6))
-        c_th.add_widget(Label(text=fa('ضخامت لوله/فولاد (mm)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_th = SafeInput(text='12')
-        self.in_th.bind(text=self.calc)
-        c_th.add_widget(self.in_th)
-        row.add_widget(c_th)
+        self.note(
+            'این صفحه به انتخاب ایزوتوپ وابسته نیست. '
+            'مدل فقط قانون عکس مجذور فاصله در هندسه مناسب '
+            'و بدون تغییر حفاظ است؛ پراکندگی و نشتی واقعی '
+            'را تضمین نمی‌کند. '
+            'مرز نهایی باید در محل اندازه‌گیری و تأیید شود.'
+        )
 
-        c_sfd = SafeCard(orientation='vertical', padding=dp(6))
-        c_sfd.add_widget(Label(text=fa('فاصله SFD فیلم (cm)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_sfd = SafeInput(text='50')
-        self.in_sfd.bind(text=self.calc)
-        c_sfd.add_widget(self.in_sfd)
-        row.add_widget(c_sfd)
-        content.add_widget(row)
+        self.finish()
 
-        c_cur = SafeCard(orientation='vertical', size_hint_y=None, height=dp(85), padding=dp(6))
-        c_cur.add_widget(Label(text=fa('اکتیویته فعلی چشمه (Ci)'), font_size=sp(11), color=(0.8, 0.8, 0.8, 1.0), **font_kw))
-        self.in_cur = SafeInput(text='40')
-        self.in_cur.bind(text=self.calc)
-        c_cur.add_widget(self.in_cur)
-        content.add_widget(c_cur)
+    def compute(self):
+        distance = xray_distance(
+            self.value('rate', True),
+            self.value('distance', True),
+            self.value('target', True),
+        )
 
-        self.res = SafeCard(orientation='vertical', bg_color=(0.04, 0.12, 0.08, 0.95), border_color=(0.10, 0.85, 0.40, 1.0), radius=12, size_hint_y=None, height=dp(130), padding=dp(10))
-        self.res.add_widget(Label(text=fa('زمان دقیق پرتودهی فیلم'), font_size=sp(12), color=(0.8, 0.9, 0.85, 1.0), **font_kw))
-        self.lbl_t = Label(text=fa('--'), font_size=sp(26), bold=True, color=(0.15, 1.0, 0.45, 1.0), **font_kw)
-        self.lbl_f_info = Label(text=fa('فیلم استاندارد رادیوگرافی کلاس I / II'), font_size=sp(11), color=(0.7, 0.8, 0.75, 1.0), **font_kw)
-        self.res.add_widget(self.lbl_t)
-        self.res.add_widget(self.lbl_f_info)
-        content.add_widget(self.res)
-
-        scroll.add_widget(content)
-        self.add_widget(scroll)
-        self.calc()
-
-    def calc(self, *args):
-        try:
-            th = float(self.in_th.text.strip() or '12')
-            sfd = float(self.in_sfd.text.strip() or '50')
-            cur = max(0.1, float(self.in_cur.text.strip() or '40'))
-            iso = ISOTOPES.get(self.app.current_source, ISOTOPES['Ir-192'])
-            dist_factor = math.pow(sfd / 50.0, 2.0)
-            thick_factor = math.pow(2.0, th / iso['hvl_fe'])
-            sec = (iso['factor'] * thick_factor * dist_factor * 120.0) / (cur / 10.0)
-            m = int(sec // 60)
-            s = int(sec % 60)
-            txt = f"{int(sec)} ثانیه" if m == 0 else f"{m} دقیقه و {s} ثانیه"
-            self.lbl_t.text = fa(txt)
-        except Exception:
-            pass
+        return (
+            f'فاصله برآوردی: {distance:.3g} متر',
+            'صرفاً برون‌یابی نرخ دوز؛ نه تأیید ایمنی.',
+        )
 
 
-# ----------------- صفحه ۵: شناسنامه ایزوتوپ -----------------
+class DecayScreen(CalculationScreen):
+    def __init__(self, app, **kwargs):
+        super().__init__(
+            app,
+            'محاسبه واپاشی بر اساس روز',
+            **kwargs,
+        )
+
+        self.field(
+            'initial',
+            'اکتیویته اولیه (Ci)',
+            '80',
+        )
+        self.field(
+            'days',
+            'روزهای سپری‌شده',
+            '30',
+        )
+
+        self.note(
+            'نیمه‌عمرها از کد اولیه منتقل شده‌اند؛ '
+            'برای کار عملی با گواهی چشمه و منابع معتبر تطبیق دهید. '
+            'محاسبه خودکار تاریخ امروز انجام نمی‌شود؛ '
+            'تعداد روز را وارد کنید.'
+        )
+
+        self.finish()
+
+    def compute(self):
+        initial = self.value('initial')
+
+        activity, percent = decay(
+            self.app.current_source,
+            initial,
+            self.value('days'),
+        )
+
+        if initial:
+            info = f'افت نسبت به مقدار اولیه: {percent:.2f}٪'
+        else:
+            info = 'برای مقدار اولیه صفر، درصد افت تعریف نمی‌شود.'
+
+        return f'{activity:.6g} Ci', info
+
+
+class ExposureScreen(CalculationScreen):
+    def __init__(self, app, **kwargs):
+        super().__init__(
+            app,
+            'زمان پرتودهی از اکسپوژر مرجع تأییدشده',
+            **kwargs,
+        )
+
+        self.reference_source = app.current_source
+
+        self.field(
+            'time',
+            'زمان مرجع تأییدشده (ثانیه)',
+        )
+        self.field(
+            'ref_activity',
+            'اکتیویته در اکسپوژر مرجع (Ci)',
+        )
+        self.field(
+            'ref_sfd',
+            'فاصله SFD مرجع (cm)',
+        )
+        self.field(
+            'activity',
+            'اکتیویته فعلی (Ci)',
+            '40',
+        )
+        self.field(
+            'sfd',
+            'فاصله SFD جدید (cm)',
+            '50',
+        )
+
+        self.note(
+            'مرجع باید برای همین ایزوتوپ، جنس و ضخامت عبوری، '
+            'فیلم، دانسیته هدف، اسکرین، شرایط ظهور '
+            'و آرایش پرتودهی باشد. '
+            'فقط تغییر اکتیویته و SFD مقیاس می‌شود؛ '
+            'تغییر هندسه ممکن است به تأیید مجدد روش نیاز داشته باشد.'
+        )
+
+        self.note(
+            'ضریب تعریف‌نشده factor حذف شد؛ '
+            'بدون مرجع معتبر، زمان قابل محاسبه نیست. '
+            'با تغییر ایزوتوپ، ورودی‌های مرجع پاک می‌شوند '
+            'تا مرجع قبلی اشتباه استفاده نشود.'
+        )
+
+        self.finish()
+
+    def _source_changed(self, *args):
+        source = self.app.current_source
+
+        if source != self.reference_source:
+            self.reference_source = source
+
+            for key in ('time', 'ref_activity', 'ref_sfd'):
+                self.inputs[key].text = ''
+
+        super()._source_changed(*args)
+
+    def compute(self):
+        seconds = exposure_seconds(
+            self.value('time', True),
+            self.value('ref_activity', True),
+            self.value('ref_sfd', True),
+            self.value('activity', True),
+            self.value('sfd', True),
+        )
+
+        return (
+            f'زمان مقیاس‌شده: {seconds:.6g} ثانیه',
+            'تخمین مبتنی بر مرجع؛ نه زمان دقیق یا تضمین کیفیت فیلم.',
+        )
+
+
 class IsotopeInfoScreen(Screen):
-    def __init__(self, app, **kwargs):
-        super(IsotopeInfoScreen, self).__init__(**kwargs)
-        self.app = app
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        content = BoxLayout(orientation='vertical', size_hint_y=None, padding=[dp(12), dp(8)], spacing=dp(8))
-        content.bind(minimum_height=content.setter('height'))
+        scroll = ScrollView(do_scroll_x=False)
 
-        for iso_key, data in ISOTOPES.items():
-            card = SafeCard(orientation='vertical', size_hint_y=None, height=dp(105), padding=dp(8), spacing=dp(3))
-            card.add_widget(Label(text=fa(f"{data['name']} ({iso_key})"), bold=True, font_size=sp(13), color=(1.0, 0.5, 0.0, 1.0), halign='right', **font_kw))
-            card.add_widget(Label(text=fa(f"ثابت گاما: {data['gamma']} R/h.Ci at 1m  |  میانگین انرژی: {data['energy']}"), font_size=sp(10), color=(0.8, 0.85, 0.9, 1.0), halign='right', **font_kw))
-            card.add_widget(Label(text=fa(f"نیمه‌عمر: {data['half_life']} روز  |  HVL سرب: {data['hvl_pb']} mm"), font_size=sp(10), color=(0.8, 0.85, 0.9, 1.0), halign='right', **font_kw))
-            card.add_widget(Label(text=fa(f"HVL فولاد: {data['hvl_fe']} mm"), font_size=sp(10), color=(0.6, 0.85, 0.7, 1.0), halign='right', **font_kw))
+        content = BoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            padding=dp(12),
+            spacing=dp(10),
+        )
+
+        content.bind(
+            minimum_height=content.setter('height')
+        )
+
+        content.add_widget(
+            WrappedLabel(
+                'داده‌های زیر از نسخه اولیه منتقل شده‌اند '
+                'و مستقلاً اعتبارسنجی نشده‌اند. '
+                'HVL ثابت، مدل ساده است و برای طراحی حفاظ کافی نیست.',
+                color=(1, .78, .35, 1),
+            )
+        )
+
+        for key, data in ISOTOPES.items():
+            card = SafeCard(
+                orientation='vertical',
+                size_hint_y=None,
+                padding=dp(8),
+            )
+
+            card.bind(
+                minimum_height=card.setter('height')
+            )
+
+            lines = (
+                f"{data['name']} ({key})",
+                f"ثابت گامای ورودی: {data['gamma']} R·m²/(Ci·h)",
+                f"انرژی درج‌شده: {data['energy']} | "
+                f"نیمه‌عمر: {data['half_life']} روز",
+                f"HVL سرب: {data['hvl_pb']} mm | "
+                f"HVL فولاد: {data['hvl_fe']} mm",
+            )
+
+            for text in lines:
+                card.add_widget(WrappedLabel(text))
+
             content.add_widget(card)
 
         scroll.add_widget(content)
         self.add_widget(scroll)
 
 
-# ----------------- کلاس اصلی برنامه -----------------
 class NDTMainApp(App):
+    current_source = StringProperty('Ir-192')
+
     def build(self):
-        Window.clearcolor = (0.05, 0.06, 0.08, 1.0)
-        self.title = 'رادیوگرافی صنعتی'
-        self.current_source = 'Ir-192'
-        self.bottom_buttons = {}
+        self.title = 'رادیوگرافی صنعتی ـ برآورد آموزشی'
+        Window.clearcolor = (.05, .06, .08, 1)
 
         root = BoxLayout(orientation='vertical')
 
-        font_kw = {'font_name': FONT_PATH} if FONT_PATH and os.path.exists(FONT_PATH) else {}
+        header = SafeCard(
+            size_hint_y=None,
+            height=dp(84),
+            padding=dp(8),
+        )
 
-        # هدر بالا با حاشیه و پدینگ کامل که حرف «ش» به هیچ وجه بریده نشود
-        header = SafeCard(size_hint_y=None, height=dp(68), padding=[dp(14), dp(4), dp(22), dp(4)], spacing=dp(10))
-        logo_f = get_asset('logo.png')
-        if logo_f:
-            header.add_widget(Image(source=logo_f, size_hint=(None, 1), width=dp(52)))
+        logo = get_asset('logo.png')
 
-        t_box = BoxLayout(orientation='vertical', padding=[dp(8), 0, dp(4), 0])
-        t_box.add_widget(Label(text=fa('شرکت رادیوگرافی صنعتی ایران'), font_size=sp(14), bold=True, color=(1.0, 0.50, 0.0, 1.0), halign='right', **font_kw))
-        t_box.add_widget(Label(text=fa('محاسبات دوز، فاصله ایمن و پرتوگیری'), font_size=sp(10), color=(0.75, 0.80, 0.85, 1.0), halign='right', **font_kw))
-        header.add_widget(t_box)
+        if logo:
+            header.add_widget(
+                Image(
+                    source=logo,
+                    size_hint_x=None,
+                    width=dp(48),
+                )
+            )
+
+        title_scroll = ScrollView(do_scroll_x=False)
+
+        title = WrappedLabel(
+            'شرکت رادیوگرافی صنعتی ایران\n'
+            'برآورد محاسبات؛ بدون تأیید ایمنی',
+            color=ORANGE,
+        )
+
+        title_scroll.add_widget(title)
+        header.add_widget(title_scroll)
         root.add_widget(header)
 
-        # مدیریت صفحات (ScreenManager)
-        self.sm = ScreenManager(transition=FadeTransition(duration=0.15))
-        self.sm.add_widget(SafetyScreen(self, name='screen_safety'))
-        self.sm.add_widget(XRayScreen(self, name='screen_xray'))
-        self.sm.add_widget(DecayScreen(self, name='screen_decay'))
-        self.sm.add_widget(ExposureScreen(self, name='screen_exposure'))
-        self.sm.add_widget(IsotopeInfoScreen(self, name='screen_info'))
+        selectors = GridLayout(
+            cols=4,
+            size_hint_y=None,
+            height=dp(44),
+            spacing=dp(4),
+        )
+
+        self.iso_buttons = {}
+
+        for source in ISOTOPES:
+            button = Button(
+                text=source,
+                background_normal='',
+                font_size=sp(13),
+                background_color=(
+                    ORANGE
+                    if source == self.current_source
+                    else INACTIVE
+                ),
+            )
+
+            button.bind(
+                on_release=lambda inst, name=source:
+                self.set_source(name)
+            )
+
+            self.iso_buttons[source] = button
+            selectors.add_widget(button)
+
+        root.add_widget(selectors)
+
+        if not FONT_PATH:
+            root.add_widget(
+                WrappedLabel(
+                    'هشدار: فونت فارسی پیدا نشد؛ '
+                    'فایل Vazirmatn-Regular.ttf را کنار برنامه بگذارید.',
+                    color=(1, .7, .3, 1),
+                )
+            )
+
+        self.sm = ScreenManager(
+            transition=FadeTransition(duration=.15)
+        )
+
+        screens = (
+            (SafetyScreen, 'safety'),
+            (XRayScreen, 'xray'),
+            (DecayScreen, 'decay'),
+            (ExposureScreen, 'exposure'),
+        )
+
+        for cls, name in screens:
+            self.sm.add_widget(cls(self, name=name))
+
+        self.sm.add_widget(
+            IsotopeInfoScreen(name='info')
+        )
+
         root.add_widget(self.sm)
 
-        # ۵ دکمه ناوبری پایین صفحه (با قابلیت سوییچ واقعی و آنی صفحه)
-        nav_bar = GridLayout(cols=5, size_hint_y=None, height=dp(54))
-        tabs = [
-            ('مرزبندی و حفاظ', 'screen_safety'),
-            ('ایکس‌ری (X-Ray)', 'screen_xray'),
-            ('واپاشی روز', 'screen_decay'),
-            ('زمان پرتودهی', 'screen_exposure'),
-            ('شناسنامه ایزوتوپ', 'screen_info')
-        ]
+        # Horizontal scrolling for narrow phone screens.
+        nav_scroll = ScrollView(
+            size_hint_y=None,
+            height=dp(56),
+            do_scroll_y=False,
+        )
 
-        for i, (t_name, s_name) in enumerate(tabs):
-            is_active = (i == 0)
-            b = Button(
-                text=fa(t_name),
-                font_size=sp(10),
-                bold=True,
+        nav = GridLayout(
+            rows=1,
+            size_hint_x=None,
+            spacing=dp(2),
+        )
+
+        nav.bind(
+            minimum_width=nav.setter('width')
+        )
+
+        self.nav_buttons = {}
+
+        tabs = (
+            ('مرزبندی', 'safety'),
+            ('ایکس‌ری', 'xray'),
+            ('واپاشی', 'decay'),
+            ('پرتودهی', 'exposure'),
+            ('ایزوتوپ‌ها', 'info'),
+        )
+
+        for label, name in tabs:
+            button = Button(
+                text=fa(label),
+                size_hint_x=None,
+                width=dp(100),
                 background_normal='',
-                background_color=(1.0, 0.45, 0.0, 1.0) if is_active else (0.12, 0.14, 0.17, 1.0),
-                color=(1, 1, 1, 1),
-                **font_kw
+                font_size=sp(12),
+                background_color=(
+                    ORANGE if name == 'safety' else INACTIVE
+                ),
+                **FONT_KW,
             )
-            b.bind(on_release=lambda inst, sn=s_name, btn=b: self.switch_tab(sn, btn))
-            self.bottom_buttons[s_name] = b
-            nav_bar.add_widget(b)
 
-        root.add_widget(nav_bar)
+            button.bind(
+                on_release=lambda inst, target=name:
+                self.switch_tab(target)
+            )
+
+            self.nav_buttons[name] = button
+            nav.add_widget(button)
+
+        nav_scroll.add_widget(nav)
+        root.add_widget(nav_scroll)
+
         return root
 
-    def switch_tab(self, screen_name, clicked_btn):
-        self.sm.current = screen_name
-        for sn, b in self.bottom_buttons.items():
-            b.background_color = (1.0, 0.45, 0.0, 1.0) if sn == screen_name else (0.12, 0.14, 0.17, 1.0)
+    def set_source(self, name):
+        self.current_source = name
+
+        for source, button in self.iso_buttons.items():
+            button.background_color = (
+                ORANGE if source == name else INACTIVE
+            )
+
+    def switch_tab(self, name):
+        self.sm.current = name
+
+        for target, button in self.nav_buttons.items():
+            button.background_color = (
+                ORANGE if target == name else INACTIVE
+            )
+
 
 if __name__ == '__main__':
     NDTMainApp().run()
