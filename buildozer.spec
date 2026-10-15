@@ -1,6 +1,6 @@
 [app]
 
-title = NDT Safe Distance
+title = ایمنی پرتو
 package.name = ndtsafedistance
 package.domain = com.industrialradiographyiran
 
@@ -17,8 +17,17 @@ fullscreen = 0
 
 android.permissions = INTERNET
 
-icon.filename = %(source.dir)s/icon.png
+# ----------------- تنظیمات آیکون و اسپلش (حل قطعی مشکل آیکون) -----------------
+# آیکون کلاسیک (اندرویدهای قدیمی)
+icon.filename = %(source.dir)s/logo.png
+
+# آیکون تطبیقی جدید (اندروید 8 تا 14 - حیاتی برای گوشی‌های جدید)
+icon.adaptive_foreground.filename = %(source.dir)s/logo.png
+icon.adaptive_background.filename = %(source.dir)s/logo.png
+
+# تصویر صفحه شروع (Splash Screen)
 presplash.filename = %(source.dir)s/company_banner.png
+# --------------------------------------------------------------------------
 
 android.api = 34
 android.minapi = 21
