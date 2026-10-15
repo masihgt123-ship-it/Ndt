@@ -17,7 +17,7 @@ from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_asset_path(filename):
-    """یافتن مطمئن فایل در اندروید و سیستم‌عامل‌های مختلف"""
+    """یافتن فایل در اندروید و سیستم‌های مختلف"""
     candidates = [
         filename,
         os.path.join(BASE_DIR, filename),
@@ -41,7 +41,7 @@ except ImportError:
     def fa(text):
         return text
 
-# پشتیبانی از هر دو نام فونت در مخزن
+# پشتیبانی از نام‌های مختلف فونت
 font_file = get_asset_path("Vazirmatn-Regular.ttf") or get_asset_path("font.ttf")
 FONT_PATH = font_file if font_file else "Roboto"
 
@@ -101,6 +101,7 @@ class NDTApp(App):
         Window.clearcolor = (0.05, 0.06, 0.07, 1)
         self.current_iso = "Ir-192"
 
+        # FloatLayout برای لایه‌بندی پس‌زمینه
         main_root = FloatLayout()
 
         # ----------------- پس‌زمینه (bg.png) -----------------
@@ -115,7 +116,6 @@ class NDTApp(App):
             )
             main_root.add_widget(bg_image)
 
-            # لایه نیمه‌شفاف برای خوانایی متن‌ها روی عکس
             overlay = BoxLayout(size_hint=(1, 1))
             with overlay.canvas.before:
                 Color(0.04, 0.05, 0.07, 0.85)
@@ -124,7 +124,7 @@ class NDTApp(App):
                          size=lambda inst, val: setattr(self.rect_overlay, 'size', val))
             main_root.add_widget(overlay)
 
-        # ----------------- بدنه اصلی -----------------
+        # ----------------- بدنه اصلی برنامه -----------------
         root = BoxLayout(orientation='vertical', size_hint=(1, 1))
 
         # نوار هدر (لوگو + عنوان شرکت)
@@ -173,7 +173,6 @@ class NDTApp(App):
         header.add_widget(h_title)
         root.add_widget(header)
 
-        # محفظه تب‌ها
         self.container = BoxLayout(size_hint=(1, 1))
         root.add_widget(self.container)
 
