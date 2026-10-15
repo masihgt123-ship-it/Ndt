@@ -6,9 +6,13 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -22,38 +26,65 @@ jobs:
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip autoconf libtool pkg-config \
+            git zip unzip autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             libtinfo5 cmake libffi-dev libssl-dev \
             build-essential ccache \
             libltdl-dev libsqlite3-dev \
             libjpeg-dev libpng-dev curl wget
 
-      - name: Download Persian font
+      - name: Check project files
         run: |
-          if [ ! -f font.ttf ]; then
-            curl -L -o font.ttf "https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Regular.ttf" || \
-            wget -O font.ttf "https://github.com/rastikerdar/vazirmatn/releases/latest/download/Vazirmatn-Regular.ttf" || true
+          test -f main.py
+          test -f buildozer.spec
+
+          if [ ! -f Vazirmatn-Regular.ttf ] && \
+             [ ! -f font.ttf ] && \
+             [ ! -f assets/Vazirmatn-Regular.ttf ] && \
+             [ ! -f assets/font.ttf ]; then
+            echo "::error::Persian font file is missing."
+            exit 1
           fi
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          pip install buildozer cython==0.29.36
+          python -m pip install buildozer "cython==0.29.36"
+
+      - name: Check Python syntax
+        run: |
+          python -m compileall -q main.py
+          if [ -f calculations.py ]; then
+            python -m compileall -q calculations.py
+          fi
+          if [ -f ndt_calculator.py ]; then
+            python -m compileall -q ndt_calculator.py
+          fi
 
       - name: Build APK
+        shell: bash
         run: |
-          buildozer android debug
+          set -o pipefail
+          buildozer -v android debug 2>&1 | tee build.log
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ndt-apk
           path: bin/*.apk
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
