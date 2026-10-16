@@ -18,12 +18,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -33,40 +33,53 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev \
-            build-essential ccache \
-            libltdl-dev libsqlite3-dev \
-            libjpeg-dev libpng-dev curl wget
+            git zip unzip autoconf automake autopoint \
+            libtool pkg-config zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 \
+            cmake libffi-dev libssl-dev build-essential \
+            ccache libltdl-dev libsqlite3-dev \
+            libjpeg-dev libpng-dev curl wget \
+            python3-venv
 
       - name: Check project files
         run: |
-          test -f main.py
-          test -f buildozer.spec
+          python - <<'PY'
+          from pathlib import Path
 
-          if [ ! -f Vazirmatn-Regular.ttf ] && \
-             [ ! -f font.ttf ] && \
-             [ ! -f assets/Vazirmatn-Regular.ttf ] && \
-             [ ! -f assets/font.ttf ]; then
-            echo "::error::Persian font file is missing."
-            exit 1
-          fi
+          required = [
+              "main.py",
+              "calculations.py",
+              "buildozer.spec",
+              "assets/font.ttf",
+              "icon.png",
+              "company_banner.png",
+              "Screenshot_20261015-203531.png",
+          ]
+
+          missing = [
+              name for name in required
+              if not Path(name).is_file()
+          ]
+
+          if missing:
+              for name in missing:
+                  print(f"::error::Missing file: {name}")
+              raise SystemExit(1)
+
+          print("All required files are present.")
+          PY
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-          python -m pip install buildozer "cython==0.29.36"
+          python -m pip install \
+            buildozer==1.5.0 \
+            Cython==0.29.36 \
+            virtualenv==20.26.6
 
       - name: Check Python syntax
         run: |
-          python -m compileall -q main.py
-          if [ -f calculations.py ]; then
-            python -m compileall -q calculations.py
-          fi
-          if [ -f ndt_calculator.py ]; then
-            python -m compileall -q ndt_calculator.py
-          fi
+          python -m py_compile main.py calculations.py
 
       - name: Build APK
         shell: bash
@@ -74,7 +87,7 @@ jobs:
           set -o pipefail
           buildozer -v android debug 2>&1 | tee build.log
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ndt-apk
