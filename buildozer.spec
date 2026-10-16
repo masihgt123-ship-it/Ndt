@@ -1,6 +1,6 @@
 [app]
 
-title = شرکت رادیوگرافی صنعتی ایران
+title = ndt
 package.name = ndtsafedistance
 package.domain = com.industrialradiographyiran
 
