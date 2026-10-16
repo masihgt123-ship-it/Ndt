@@ -34,7 +34,10 @@ from calculations import (
 
 
 BASE = Path(__file__).resolve().parent
+
 FONT = str(BASE / 'assets' / 'font.ttf')
+LOGO = str(BASE / 'Screenshot_20261015-203531.png')
+BANNER = str(BASE / 'company_banner.png')
 
 BRAND = 'شرکت رادیوگرافی صنعتی ایران'
 
@@ -76,6 +79,7 @@ class FaLabel(Label):
             width=self._wrap,
             texture_size=self._fit,
         )
+
         self._wrap()
 
     def set_text(self, text):
@@ -122,9 +126,11 @@ class Card(BoxLayout):
 
         with self.canvas.before:
             self._color = Color(*self.fill)
+
             self._rect = RoundedRectangle(
                 radius=[dp(13)]
             )
+
             Color(*BORDER)
             self._line = Line(width=1)
 
@@ -133,6 +139,7 @@ class Card(BoxLayout):
             size=self._paint,
             fill=self._paint,
         )
+
         self._paint()
 
     def _paint(self, *args):
@@ -164,9 +171,11 @@ class BlueButton(Button):
 
         with self.canvas.before:
             self._color = Color(*self.fill)
+
             self._rect = RoundedRectangle(
                 radius=[dp(11)]
             )
+
             Color(*BORDER)
             self._line = Line(width=1)
 
@@ -175,6 +184,7 @@ class BlueButton(Button):
             size=self._paint,
             fill=self._paint,
         )
+
         self._paint()
 
     def _paint(self, *args):
@@ -327,8 +337,8 @@ class CalculationScreen(Screen):
             if parent is not None
             else self.content
         )
-        container.add_widget(card)
 
+        container.add_widget(card)
         card.input.bind(text=self.calc)
 
     def finish(self, result_title):
@@ -433,6 +443,7 @@ class CalculationScreen(Screen):
             )
 
             self.result.color = ERROR
+
             self.details.set_text(
                 'خطای داخلی؛ گزارش برنامه را بررسی کنید'
             )
@@ -682,15 +693,7 @@ class NDTMainApp(App):
         )
 
         splash = Screen(name='splash')
-
-        splash.add_widget(
-            Image(
-                source=str(
-                    BASE / 'assets' / 'company_banner.png'
-                )
-            )
-        )
-
+        splash.add_widget(Image(source=BANNER))
         self.outer.add_widget(splash)
 
         home = Screen(name='home')
@@ -710,7 +713,7 @@ class NDTMainApp(App):
 
         header.add_widget(
             Image(
-                source=str(BASE / 'assets' / 'logo.png'),
+                source=LOGO,
                 size_hint_x=None,
                 width=dp(78),
             )
