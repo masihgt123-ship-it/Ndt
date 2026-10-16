@@ -7,6 +7,7 @@ from bidi.algorithm import get_display
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, RoundedRectangle
@@ -38,6 +39,7 @@ BASE = Path(__file__).resolve().parent
 FONT = str(BASE / 'assets' / 'font.ttf')
 LOGO = str(BASE / 'Screenshot_20261015-203531.png')
 BANNER = str(BASE / 'company_banner.png')
+BACKGROUND = str(BASE / 'bg.png')
 
 BRAND = 'شرکت رادیوگرافی صنعتی ایران'
 
@@ -678,10 +680,14 @@ class NDTMainApp(App):
             transition=FadeTransition(duration=.2)
         )
 
+        # Keep the image loaded for the background texture.
+        self._bg_image = CoreImage(BACKGROUND)
+
         with self.outer.canvas.before:
-            Color(*BG)
+            Color(1, 1, 1, 1)
 
             self._background = RoundedRectangle(
+                texture=self._bg_image.texture,
                 pos=self.outer.pos,
                 size=self.outer.size,
                 radius=[0],
