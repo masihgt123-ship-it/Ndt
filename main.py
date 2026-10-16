@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 import logging
+import traceback
 from pathlib import Path
 
-import arabic_reshaper
-from bidi.algorithm import get_display
+STARTUP_ERRORS = []
+
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+except Exception:
+    STARTUP_ERRORS.append(traceback.format_exc())
+    arabic_reshaper = None
+    get_display = str
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.clipboard import Clipboard
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.core.window import Window
@@ -26,17 +35,27 @@ from kivy.uix.screenmanager import (
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
-from calculations import (
-    ISOTOPES,
-    boundary_estimate,
-    decay,
-    number,
-)
+try:
+    from calculations import (
+        ISOTOPES,
+        boundary_estimate,
+        decay,
+        number,
+    )
+except Exception:
+    STARTUP_ERRORS.append(traceback.format_exc())
 
 
 BASE = Path(__file__).resolve().parent
 
 FONT = str(BASE / 'assets' / 'font.ttf')
+
+if not Path(FONT).is_file():
+    logging.warning(
+        'assets/font.ttf missing; using Kivy default font'
+    )
+    FONT = 'Roboto'
+
 LOGO = str(BASE / 'Screenshot_20261015-203531.png')
 BANNER = str(BASE / 'company_banner.png')
 BACKGROUND = str(BASE / 'bg.png')
@@ -54,6 +73,9 @@ RESULT = (.125, .18, .34, 1)
 
 
 def fa(text):
+    if arabic_reshaper is None:
+        return str(text)
+
     return get_display(
         arabic_reshaper.reshape(str(text))
     )
@@ -89,6 +111,9 @@ class FaLabel(Label):
         self._wrap()
 
     def _wrap(self, *args):
+        if not hasattr(self, '_measure'):
+            return
+
         width = max(dp(20), self.width - dp(4))
         lines = []
 
@@ -671,8 +696,91 @@ class NDTMainApp(App):
 
     def build(self):
         self.title = BRAND
-
         Window.clearcolor = BG
+
+        try:
+            if STARTUP_ERRORS:
+                raise RuntimeError(
+                    '\n\n'.join(STARTUP_ERRORS)
+                )
+
+            return self._build_main()
+
+        except Exception:
+            report = traceback.format_exc()
+            logging.exception(
+                'Application startup failed'
+            )
+            return self._error_screen(report)
+
+    def _error_screen(self, report):
+        # Diagnostic UI does not depend on Persian packages
+        # or on the custom font.
+        try:
+            path = (
+                Path(self.user_data_dir)
+                / 'startup_error.txt'
+            )
+
+            path.write_text(
+                report,
+                encoding='utf-8',
+            )
+
+            report = (
+                'Report: '
+                + str(path)
+                + '\n\n'
+                + report
+            )
+
+        except Exception:
+            logging.exception(
+                'Could not save startup report'
+            )
+
+        root = BoxLayout(
+            orientation='vertical',
+            padding=dp(16),
+            spacing=dp(12),
+        )
+
+        root.add_widget(
+            Label(
+                text='Startup error - copy the report below',
+                font_name='Roboto',
+                font_size=sp(16),
+                size_hint_y=None,
+                height=dp(48),
+            )
+        )
+
+        root.add_widget(
+            TextInput(
+                text=report,
+                readonly=True,
+                font_name='Roboto',
+                font_size=sp(13),
+                multiline=True,
+            )
+        )
+
+        button = Button(
+            text='Copy error report',
+            font_name='Roboto',
+            size_hint_y=None,
+            height=dp(52),
+        )
+
+        button.bind(
+            on_release=lambda _:
+            Clipboard.copy(report)
+        )
+
+        root.add_widget(button)
+        return root
+
+    def _build_main(self):
         Window.softinput_mode = 'below_target'
         Window.bind(on_keyboard=self.on_keyboard)
 
@@ -680,14 +788,32 @@ class NDTMainApp(App):
             transition=FadeTransition(duration=.2)
         )
 
-        # Keep the image loaded for the background texture.
-        self._bg_image = CoreImage(BACKGROUND)
+        # Keep bg.png when it can be loaded.
+        # Fall back to navy if it is missing or unreadable.
+        self._bg_image = None
+
+        if Path(BACKGROUND).is_file():
+            try:
+                self._bg_image = CoreImage(BACKGROUND)
+
+            except Exception:
+                logging.exception(
+                    'Could not load bg.png; '
+                    'using navy background'
+                )
 
         with self.outer.canvas.before:
-            Color(1, 1, 1, 1)
+            if self._bg_image is not None:
+                Color(1, 1, 1, 1)
+            else:
+                Color(*BG)
 
             self._background = RoundedRectangle(
-                texture=self._bg_image.texture,
+                texture=(
+                    self._bg_image.texture
+                    if self._bg_image is not None
+                    else None
+                ),
                 pos=self.outer.pos,
                 size=self.outer.size,
                 radius=[0],
@@ -699,7 +825,20 @@ class NDTMainApp(App):
         )
 
         splash = Screen(name='splash')
-        splash.add_widget(Image(source=BANNER))
+
+        if Path(BANNER).is_file():
+            splash.add_widget(
+                Image(source=BANNER)
+            )
+        else:
+            splash.add_widget(
+                FaLabel(
+                    BRAND,
+                    color=TEXT,
+                    font_size=sp(20),
+                )
+            )
+
         self.outer.add_widget(splash)
 
         home = Screen(name='home')
@@ -717,13 +856,14 @@ class NDTMainApp(App):
             spacing=dp(10),
         )
 
-        header.add_widget(
-            Image(
-                source=LOGO,
-                size_hint_x=None,
-                width=dp(78),
+        if Path(LOGO).is_file():
+            header.add_widget(
+                Image(
+                    source=LOGO,
+                    size_hint_x=None,
+                    width=dp(78),
+                )
             )
-        )
 
         header.add_widget(
             FaLabel(
@@ -819,6 +959,9 @@ class NDTMainApp(App):
             button.select(key == name)
 
     def on_keyboard(self, window, key, *args):
+        if not hasattr(self, 'nav_buttons'):
+            return False
+
         if (
             key == 27
             and self.outer.current == 'home'
